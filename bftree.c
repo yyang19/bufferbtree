@@ -80,14 +80,6 @@ req_override(struct bftree *tree, bft_req_t *old, bft_req_t *new)
     req_free(tree, new, 0);
 }
 
-/*--------------------------container------------------------*/
-container_t *container_create()
-{
-    containter_t *c;
-
-    c = (container_t *)malloc(sizeof(struct container))bh
-
-}
 
 
 static int
@@ -485,6 +477,7 @@ bftCreate( int a, int b, int M, int B, bft_opts_t *opts )
         t->B = B;
         t->root = NULL;
         t->opts = opts;
+        t->nNode = 0;
         t->del_payload_count = t->put_payload_count = 0;
         t->node_log = fopen( "node.log", "w+" );
         t->write_log = fopen( "write.log", "w+" );

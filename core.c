@@ -44,7 +44,9 @@ static bpt_t *bptree;
 static void _descend( bpt_t *tree, node_t *node, int key );
 static void _dump2( node_t *node, FILE *write_log );
 
-/*--------------------------req------------------------*/
+
+/*------------- object creation and destroy ------------------------*/
+// request
 bt_req_t *
 req_create( void *key, void *val, enum bt_op_t op )
 {
@@ -83,8 +85,8 @@ req_override(struct bftree *tree, bt_req_t *old, bt_req_t *new)
     req_free(tree, new, 0);
 }
 
-/*--------------------------container------------------------*/
-container_t *
+// container
+static container_t *
 container_create(void)
 {
     containter_t *c;
@@ -97,7 +99,7 @@ container_create(void)
     return c;
 }
 
-void
+static void
 container_free( bftree_t *tree, container_t *c )
 {
     bt_req_t *curr, *next;
@@ -119,7 +121,131 @@ container_update( node_t *n, containter_t *c, int c_idx )
 
 
 }
-/*--------------------------container------------------------*/
+
+// node
+static node_t *
+node_create( bft_t *t, node_t *p, int type )
+{
+    node_t *n;
+    n = (node_t *) malloc (sizeof(node_t));
+
+    if( n ){
+        n->containers = (container_t *) malloc ( sizeof(container_t *) * t->a );
+        if( n->containers ){
+            p->id = ++t->nNode;
+            p->type = type;
+            p->nElem = 0;
+            n->parent = p;
+            n->container_count = t->a;
+            n->container_size = 0;
+        }
+        else{
+            free(n);
+            n=NULL;
+        }
+    }
+
+    return n;
+}
+
+static void
+node_free_single( bft_t *t, node_t *n )
+{
+    int i;
+
+    for( i=0; i<n->container_size; i++ )
+        container_free( t, n->containers[i] );
+
+    free( n->containers );
+    free( n );
+}
+
+void
+node_free( bft_t *t, node_t *r )
+{
+    int i;
+    container_t *c;
+
+    for( i=0; i<n->container_size; i++ ){
+        c = node->containers[i];
+        if( c->child )
+            node_free_single( t, c->child );
+    }
+
+    node_free_single( t, r );
+}
+
+/*-------------------------- operations ------------------------*/
+
+// request
+static bft_req_t *
+request_get( key_compare_func comp, bt_req_t *start, void *key, int *exact )
+{
+    bt_req_t *curr_req, *prev_req;
+    int compared;
+
+    prev_req = NULL;
+    curr_req = start;
+    *exact = 0;
+
+    while( curr_req ){
+        compared = comp( key, curr_req->key );
+
+        if( compared < 1 )
+            break;
+
+        if( compared == 0 ){
+            *exact = 1;
+            return curr_req;
+        }
+        
+        prev_req = curr_req;
+        curr_req = curr_req->next;
+    }
+
+    return prev_req;
+}
+
+// container
+static uint32_t
+container_find( key_compare_func comp, node_t *n, void *key, uint32_t c_start )
+{
+    int left, right, middle, result, compared;
+    container_t **containers;
+
+    left = c_start;
+    right = n->container_size;
+    compared = 0;
+    containers = n->containers;
+    
+    while( left <= right ){
+        middel = (left+right)/2;
+        compared = comp( key, containers[middle]->req_first->key );
+        if( compared<0 )
+            right = middle - 1;
+        else if( compared>0 )
+            left = middle + 1;
+        else{
+            right = middle;
+            break;
+        }
+    }   
+
+    if( compared > 0 )
+        result = left - 1;
+    else
+        result = right;
+
+    return result == 0 ? result : right - 1;
+}
+
+static bft_req_t *
+container_get( bft_t *t, node_t *n, uint32_t c_idx, void *key ){
+
+    //to be added
+    return NULL;
+}
+
 static int
 _key_binary_search(int *arr, int len, int key)
 {
