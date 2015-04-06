@@ -58,12 +58,12 @@ typedef struct container{
 } container_t;
 
 typedef struct node {
-    int *key;
     int id;
     int type;
-    int n;
+    int nElem;
 
-    container_t *containers;
+    struct node *parent;
+    container_t **containers;
     int container_count;
     int container_size;
 
@@ -81,4 +81,6 @@ typedef struct leaf {
     int *data;
 }leaf_t;
 
+
+void node_free( bft_t *, node_t * );
 #endif

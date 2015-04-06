@@ -69,6 +69,7 @@ struct tree {
     bft_opts_t *opts;
 
     //statistics
+    int nNode;
     int del_payload_count;
     int put_payload_count;
     // logging
