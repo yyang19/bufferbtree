@@ -31,16 +31,19 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 *                          
 */
-#ifndef _HEADER_TREE_
-#define _HEADER_TREE_
+#ifndef _HEADER_CORE_
+#define _HEADER_CORE_
 
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include "bftree.h"
 
 #define KEY_NOT_FOUND (-1)
 #define DATA_NOT_EXIST (-1)
 #define INVALID_KEY (-1)
+
+typedef int (*key_compare_func)(const void *key1, const void *key2);
 
 enum {
     LEAF_NODE,
@@ -52,14 +55,6 @@ enum {
     TRAVERSE_DFS = 1,
 };
 
-typedef struct req_list{
-    bft_req_t *req_first;
-    bft_req_t *req_last;
-    int req_count;
-}rlist_t;
-
-typedef rlist_t blk_buffer_t;
-
 typedef struct node {
     int id;
     int type;
@@ -67,27 +62,26 @@ typedef struct node {
 
     struct node *parent;
     blk_buffer_t **containers;
-    int container_count;
-    int container_size;
+    int bb_count;
+    int bb_size;
     
     //child node
+    int *keys;
+    int key_count;
     struct node *child;
 
     int wr_count;
 }node_t;
 
-typedef struct non_leaf {
-    node_t node;
-    node_t **children;
-}nonleaf_t;
-
-typedef struct leaf {
-    node_t node;
-    struct leaf *next;
-    int *data;
-}leaf_t;
-
 blk_buffer_t * container_create( void );
 
+int request_collect( bft_t *t, bft_req_t *req );
+void req_free( bft_t *tree, bft_req_t *r );
+bft_req_t * request_get( key_compare_func, bft_req_t *, int, int * );
+
+//block buffer
+void block_buffer_destroy( bft_t *, blk_buffer_t * );
+//node
 void node_free( bft_t *, node_t * );
+
 #endif

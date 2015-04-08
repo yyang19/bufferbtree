@@ -36,55 +36,45 @@
 #include <assert.h>
 #include <string.h>
 
-#include "core..h"
-#include "queue.h"
-
-static bpt_t *bptree;
-
-static void _descend( bpt_t *tree, node_t *node, int key );
-static void _dump2( node_t *node, FILE *write_log );
+#include "core.h"
 
 /* utilities */
-int comparetime(time_t time1,time_t time2){
-     return difftime(time1,time2) > 0.0 ? 1 : -1; 
+
+/* struct timeval {
+ *     long tv_sec;         seconds 
+ *     long tv_usec;   microseconds 
+ * }
+ */
+
+long timevaldiff(struct timeval *ta, struct timeval *tb)
+{
+      long msec;
+      msec=(tb->tv_sec-ta->tv_sec)*1000;
+      msec+=(tb->tv_usec-ta->tv_usec)/1000;
+      return msec;
 }
+
 static int
-_qsort_cmpfunc(const void * a, const void * b)
+_qsort_cmpfunc_int(const void * a, const void * b)
 {
     int key_a, key_b;
 
     key_a = (*((bft_req_t *)a)).key;
     key_b = (*((bft_req_t *)b)).key;
     
-    return key_a==key_b ? chunkid_a - chunkid_b : chan_a - chan_b;
+    return key_a > key_b ;
 }
 
 
 /*------------- object creation and destroy ------------------------*/
-// request
-bt_req_t *
-req_create( void *key, void *val, enum bt_op_t op )
-{
-    bt_req_t *r;
-
-    r =(bt_req_t *)malloc( sizeof(struct request) );
-    r->key = key;
-    r->val = val;
-    r->type = op;
-    gettimeofday(&t->tm, NULL);
-    r->next = NULL;
-
-    return r;
-}
-
 void 
-req_free(struct bftree *tree, bt_req_t *r, int nofree )
+req_free( bft_t *tree, bft_req_t *r )
 {
     free(r);
 }
 
 void 
-req_override(struct bftree *tree, bt_req_t *old, bt_req_t *new)
+req_override( bft_t *tree, bft_req_t *old, bft_req_t *new)
 {
     void *temp;
     temp = old->val;
@@ -98,43 +88,42 @@ req_override(struct bftree *tree, bt_req_t *old, bt_req_t *new)
 
     old->type = new->type;
 
-    req_free(tree, new, 0);
+    req_free(tree, new);
 }
 
-// blk_buffer
+// block buffer
 blk_buffer_t *
-container_create(void)
+bb_create(void)
 {
-    containter_t *c;
+    blk_buffer_t *bb;
 
-    c = (blk_buffer_t *)malloc(sizeof(struct blk_buffer));
-    c->req_first = NULL;
-    c->req_count = 0;
-    c->child = NULL;
+    bb= (blk_buffer_t *)malloc(sizeof(struct req_list));
+    bb->req_first = NULL;
+    bb->req_last  = NULL;
+    bb->req_count = 0;
 
-    return c;
+    return bb;
 }
 
 static void
-container_free( bftree_t *tree, blk_buffer_t *c )
+bb_free( bft_t *tree, blk_buffer_t *bb )
 {
-    bt_req_t *curr, *next;
+    bft_req_t *curr, *next;
 
-    curr = c->req_first;
+    curr = bb->req_first;
 
     while(curr){
         next = curr->next;
-        req_free( tree, curr, 0 );
+        req_free( tree, curr );
         curr = next;
     };
 
-    free(c);
+    free(bb);
 }
 
 void 
-container_update( node_t *n, containter_t *c, int c_idx )
+bb_update( node_t *n, blk_buffer_t *bb, int c_idx )
 {
-
 
 }
 
@@ -146,14 +135,14 @@ node_create( bft_t *t, node_t *p, int type )
     n = (node_t *) malloc (sizeof(node_t));
 
     if( n ){
-        n->containers = (blk_buffer_t *) malloc ( sizeof(blk_buffer_t *) * t->a );
+        n->containers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->a );
         if( n->containers ){
             p->id = ++t->nNode;
             p->type = type;
             p->nElem = 0;
             n->parent = p;
-            n->container_count = t->a;
-            n->container_size = 0;
+            n->bb_count = t->a;
+            n->bb_size = 0;
         }
         else{
             free(n);
@@ -169,35 +158,67 @@ node_free_single( bft_t *t, node_t *n )
 {
     int i;
 
-    for( i=0; i<n->container_size; i++ )
-        container_free( t, n->containers[i] );
+    for( i=0; i<n->bb_size; i++ )
+        bb_free( t, n->containers[i] );
 
     free( n->containers );
     free( n );
 }
 
 void
-node_free( bft_t *t, node_t *r )
+node_free( bft_t *t, node_t *n )
 {
     int i;
-    blk_buffer_t *c;
+    node_t *c;
 
-    for( i=0; i<n->container_size; i++ ){
-        c = node->containers[i];
-        if( c->child )
-            node_free_single( t, c->child );
+    for( i=0; i<n->bb_size; i++ ){
+        c = &n->child[i];
+        if( c )
+            node_free_single( t, c );
     }
 
-    node_free_single( t, r );
+    node_free_single( t, n );
 }
 
 /*-------------------------- operations ------------------------*/
+static void
+block_buffer_emptying( bft_t *t, node_t *n )
+{
+    int i;
+
+    assert( n->bb_size == t->m );
+
+    for( i = 0; i < t->m; i++ ){
+        //quicksort
+    }
+}
+
+static int 
+block_buffer_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
+{
+    int i;
+    int ret = 0;
+
+    i = n->bb_size;
+       
+    assert( n->bb_size < t->m );
+
+    memmove( n->containers[i], bb, t->B );
+
+    ++ n->bb_size;
+
+    if( n->bb_size == t->m )
+        block_buffer_emptying( t, n );
+
+    return ret;
+}
+
 
 // request
-static bft_req_t *
-request_get( key_compare_func comp, bt_req_t *start, void *key, int *exact )
+bft_req_t *
+request_get( key_compare_func comp, bft_req_t *start, int key, int *exact )
 {
-    bt_req_t *curr_req, *prev_req;
+    bft_req_t *curr_req, *prev_req;
     int compared;
 
     prev_req = NULL;
@@ -205,7 +226,7 @@ request_get( key_compare_func comp, bt_req_t *start, void *key, int *exact )
     *exact = 0;
 
     while( curr_req ){
-        compared = comp( key, curr_req->key );
+        compared = comp( (void *)&key, (void *)&curr_req->key );
 
         if( compared < 1 )
             break;
@@ -222,70 +243,66 @@ request_get( key_compare_func comp, bt_req_t *start, void *key, int *exact )
     return prev_req;
 }
 
-// top buffer
+void
+request_dump( bft_req_t *req ){
+
+     printf( "Request dump\n" );
+     printf( "Key = %d\t", req->key );
+     printf( "Type = %d\t", req->type );
+     printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
+}
+
 int
-top_buffer_insert( bft_t *t, bft_req_t *req )
+request_collect( bft_t *t, bft_req_t *req )
 {
-    int ret = -1;
+    int ret = 0;
 
     req->next = NULL; 
 
-    if( req_count == 0 )
+    if( t->top_buffer.req_count == 0 )
         t->top_buffer.req_first = req;
     else
-        t->top_buffer.req_last.next = req;
+        t->top_buffer.req_last->next = req;
 
     t->top_buffer.req_last = req;
 
     ++t->top_buffer.req_count;
 
     if( t->top_buffer.req_count == t->c ) //a block of requests have been collected
-        ret = block_buffer_insert( t, root, &t->top_buffer );
-
-    return ret;
-}
-
-int 
-block_buffer_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
-{
-    int i;
-    int ret = 0;
-
-    i = n->container_size;
-       
-    assert( n->container_size < t->m );
-
-    memmove( n->containers[i], bb, t->B );
-
-    ++ n->container_size;
-
-    if( n->container_size == t->m )
-        buffer_emptying( t, n );
+        ret = block_buffer_insert( t, t->root, &t->top_buffer );
 
     return ret;
 }
 
 void
-buffer_emptying( bft_t *t, node_t *n )
+block_buffer_destroy( bft_t *t, blk_buffer_t *bb )
 {
-    int i;
-
-    assert( n->container_size == t->m );
-
-    for( i = 0; i < t->m; i++ ){
-        //quicksort
-        containers[i]
-    }
+    bb_free( t, bb );
 }
+
+void
+block_buffer_dump( blk_buffer_t *bb ){
+
+    bft_req_t *curr = bb->req_first;
+
+    while( curr ){
+        request_dump( curr );
+        curr = curr->next;
+    };
+
+    return;
+}
+
+#if 0
 // blk_buffer
 static uint32_t
-container_find( key_compare_func comp, node_t *n, void *key, uint32_t c_start )
+bb_find( key_compare_func comp, node_t *n, int key, uint32_t c_start )
 {
     int left, right, middle, result, compared;
     blk_buffer_t **containers;
 
     left = c_start;
-    right = n->container_size;
+    right = n->bb_size;
     compared = 0;
     containers = n->containers;
     
@@ -311,14 +328,14 @@ container_find( key_compare_func comp, node_t *n, void *key, uint32_t c_start )
 }
 
 static bft_req_t *
-container_get( bft_t *t, node_t *n, uint32_t c_idx, void *key ){
+bb_get( bft_t *t, node_t *n, uint32_t c_idx, int key ){
 
     bft_req_t *curr;
     containter_t *c;
     int exact;
     int (*comp)(const void *, const void * );
 
-    if( c_idx >= n->container_size )
+    if( c_idx >= n->bb_size )
         return NULL;
 
     comp = t->opts->key_compare;
@@ -332,136 +349,24 @@ container_get( bft_t *t, node_t *n, uint32_t c_idx, void *key ){
     }
 
     if( c->child ){
-        c_idx = container_find( comp, c->child, key, 0 );
-        return container_get( tree, c->child, c_idx, key );
+        c_idx = bb_find( comp, c->child, key, 0 );
+        return bb_get( tree, c->child, c_idx, key );
     }
 
     return NULL;
 }
 
 static blk_buffer_t *
-container_shift_left( node_t *n, uint32_t c_idx )
+bb_shift_left( node_t *n, uint32_t c_idx )
 {
     blk_buffer_t *removed;
 
-    ASSERT( c_idx < n->container_size );
+    ASSERT( c_idx < n->bb_size );
 
     removed = n->containers[c_idx];
-    memmove( &n->containers[c_idx], &n->containers[c_idx+1], (n->container_size-c_idx-1)*sizeof(void *) );
-    --n->container_size;
+    memmove( &n->containers[c_idx], &n->containers[c_idx+1], (n->bb_size-c_idx-1)*sizeof(void *) );
+    --n->bb_size;
 
     return removed;
 }
-
-// routines used by traverse
-static void
-_dfs( node_t *subroot, FILE *log )
-{
-    int i;
-    nonleaf_t *nln;
-
-    if( subroot->type == LEAF_NODE ){
-        _dump2(subroot,log);
-        return;
-    }
-    
-    nln = (nonleaf_t *)subroot;
-
-    for( i=0; i<=subroot->n; i++ ){
-        _dfs( nln->children[i],log );
-    }
-
-    _dump2(subroot,log);
-
-    return;
-}
-
-static void
-_bfs( node_t *subroot, FILE *log )
-{
-    int i;
-    nonleaf_t *nln;
-    fifo_t *q;
-    node_t *node;
-
-    q = _fifo_init( 1000 );
-
-    _fifo_push( q, subroot );
-
-    while( ! _fifo_empty(q) ){
-    
-        //dequque a node 
-        node = _fifo_peek(q);
-        _dump2(node,log);
-
-        if( node->type == NON_LEAF_NODE ){
-            //enqueue the children
-            nln = (nonleaf_t *)node;
-            for( i=0; i<=node->n; i++ )
-                _fifo_push( q, nln->children[i] );
-        }
-
-        _fifo_pop(q);
-    }
-
-    _fifo_destroy(q);
-
-    return;
-}
-
-
-#ifdef DEBUG
-void _d( bpt_t *t )
-{
-    int i,j;
-    int ichildren;
-    node_t *node;
-    leaf_t *leaf;
-    nonleaf_t *nln;
-
-    if( !t )
-        return;
-    
-    node = t->root;
-
-    printf( "Level root: ");
-    for( i = 0; i<node->n; i++ ){
-        printf(" <%d> ", node->key[i]);
-    }
-    printf( "\n");
-
-    if( node->n > 0 ){
-        nln = (nonleaf_t *)node;
-        ichildren = node->n;
-        printf( "Level 2: ");
-        for( i = 0; i<=ichildren; i++ ){
-            node = nln->children[i];
-            for( j = 0; j<node->n; j++ ){
-                printf(" <%d> ", node->key[j]);
-            }
-            printf( "|\t");
-        }
-        printf( "\n");
-    }
-    
-    printf( "Leaf level: ");
-    node = t->root;
-
-    while( node->type == NON_LEAF_NODE )
-        node = ((nonleaf_t *)node)->children[0];
-        
-    assert( node->type == LEAF_NODE );
-
-    leaf = (leaf_t *) node;
-
-    while( leaf ){
-        for(i=0; i<leaf->node.n; i++){
-            printf(" <%d,%d> ", leaf->node.key[i], leaf->data[i]);                
-        }
-        printf( "|\t");
-        leaf = leaf->next;
-    }
-    printf("\n");
-}
-
 #endif
