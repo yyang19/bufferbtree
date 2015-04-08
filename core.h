@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #define KEY_NOT_FOUND (-1)
 #define DATA_NOT_EXIST (-1)
@@ -51,11 +52,13 @@ enum {
     TRAVERSE_DFS = 1,
 };
 
-typedef struct container{
+typedef struct req_list{
     bft_req_t *req_first;
+    bft_req_t *req_last;
     int req_count;
-    struct node *child;
-} container_t;
+}rlist_t;
+
+typedef rlist_t blk_buffer_t;
 
 typedef struct node {
     int id;
@@ -63,9 +66,12 @@ typedef struct node {
     int nElem;
 
     struct node *parent;
-    container_t **containers;
+    blk_buffer_t **containers;
     int container_count;
     int container_size;
+    
+    //child node
+    struct node *child;
 
     int wr_count;
 }node_t;
@@ -81,6 +87,7 @@ typedef struct leaf {
     int *data;
 }leaf_t;
 
+blk_buffer_t * container_create( void );
 
 void node_free( bft_t *, node_t * );
 #endif
