@@ -35,7 +35,7 @@
 #define _HEADER_BPLUSTREE_FIFO_
 
 #include <stdint.h>
-#include "bplustree.h"
+#include "core.h"
 
 typedef struct
 {

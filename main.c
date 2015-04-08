@@ -3,7 +3,7 @@
 #include <math.h>
 #include <assert.h>
 
-#include "bplustree.h"
+#include "bftree.h"
 
 #define MAX (1<<10)
 #define TC_0_TRIAL (10000000)
@@ -89,12 +89,25 @@ destroy_array( int *a ){
     free(a);
 }
 
+int 
+comp_int( const void *a, const void *b )
+{
+    return (*((int *)a)) > (*((int *)b)) ; 
+}
+
 int main( int argc, char *argv[] ){
     
     int result = 0;
-    int b,n;
-    bpt_t *t; 
+    int n;
+    bft_t *t; 
     int *keys;
+    int val;
+    int m = 8;
+    int B = 320;
+
+    bft_opts_t opts;
+    opts.log = 1;
+    opts.key_compare = &comp_int;
     
     if( argc!=3 ){
         _help();
@@ -102,160 +115,157 @@ int main( int argc, char *argv[] ){
     }
 
     if( result == 0 ){
-        b = atoi( argv[1] );
+        m = atoi( argv[1] );
         n = atoi( argv[2] );
-        t = bptInit(b);
+        t = bftCreate(m/4,m,m,B,&opts);
     }
 
     if( !t )
         return -1;    
 
 #if 0  
-     bptPut(t, 90, 0);
-     bptDump(t);
-     bptPut(t, 88, 0);
-     bptDump(t);
-     bptPut(t, 74, 0);
-     bptDump(t);
-     bptPut(t, 72, 0);
-     bptDump(t);
-     bptPut(t, 68, 0);
-     bptDump(t);
-     bptPut(t, 63, 0);
-     bptDump(t);
-     bptPut(t, 53, 0);
-     bptDump(t);
-     bptPut(t, 44, 0);
-     bptDump(t);
-     bptPut(t, 39, 0);
-     bptDump(t);
-     bptPut(t, 24, 0);
-     bptDump(t);
-     bptPut(t, 15, 0);
-     bptDump(t);
-     bptPut(t, 10, 0);
-     bptDump(t);
-     bptPut(t, 1, 0);
-     bptDump(t);
-     //bptDump(t);
-     printf("key:24 data:%d\n", bptGet(t, 24));
-     printf("key:72 data:%d\n", bptGet(t, 72));
-     printf("key:01 data:%d\n", bptGet(t, 1));
-     printf("key:39 data:%d\n", bptGet(t, 39));
-     printf("key:53 data:%d\n", bptGet(t, 53));
-     printf("key:63 data:%d\n", bptGet(t, 63));
-     printf("key:90 data:%d\n", bptGet(t, 90));
-     printf("key:88 data:%d\n", bptGet(t, 88));
-     printf("key:15 data:%d\n", bptGet(t, 15));
-     printf("key:10 data:%d\n", bptGet(t, 10));
-     printf("key:44 data:%d\n", bptGet(t, 44));
-     printf("key:68 data:%d\n", bptGet(t, 68));
-     printf("key:74 data:%d\n", bptGet(t, 74));
-     printf("key:44 data:%d\n", bptGet(t, 44));
-     printf("key:45 data:%d\n", bptGet(t, 45));
-     printf("key:46 data:%d\n", bptGet(t, 46));
-     printf("key:47 data:%d\n", bptGet(t, 47));
-     printf("key:321 data:%d\n", bptGet(t, 321));
-     printf("key:5528 data:%d\n", bptGet(t, 5528));
-     printf("key:848 data:%d\n", bptGet(t, 848));
-     printf("key:748 data:%d\n", bptGet(t, 748));
-     printf("key:1528 data:%d\n", bptGet(t, 1528));
-     printf("key:2528 data:%d\n", bptGet(t, 2528));
-     bptRemove(t, 90);
-     bptDump(t);
-     bptRemove(t, 88);
-     bptDump(t);
-     bptRemove(t, 74);
-     bptDump(t);
-     bptRemove(t, 72);
-     bptDump(t);
-     bptRemove(t, 68);
-     bptDump(t);
-     bptRemove(t, 63);
-     bptDump(t);
-     bptRemove(t, 53);
-     bptDump(t);
-     bptRemove(t, 44);
-     bptDump(t);
-     bptRemove(t, 39);
-     bptDump(t);
-     bptRemove(t, 24);
-     bptDump(t);
-     bptRemove(t, 15);
-     bptDump(t);
-     bptRemove(t, 10);
-     bptDump(t);
-     bptRemove(t, 1);
-     bptDump(t);
+     bftPut(t, 90, 0);
+     bftDump(t);
+     bftPut(t, 88, 0);
+     bftDump(t);
+     bftPut(t, 74, 0);
+     bftDump(t);
+     bftPut(t, 72, 0);
+     bftDump(t);
+     bftPut(t, 68, 0);
+     bftDump(t);
+     bftPut(t, 63, 0);
+     bftDump(t);
+     bftPut(t, 53, 0);
+     bftDump(t);
+     bftPut(t, 44, 0);
+     bftDump(t);
+     bftPut(t, 39, 0);
+     bftDump(t);
+     bftPut(t, 24, 0);
+     bftDump(t);
+     bftPut(t, 15, 0);
+     bftDump(t);
+     bftPut(t, 10, 0);
+     bftDump(t);
+     bftPut(t, 1, 0);
+     bftDump(t);
+     //bftDump(t);
+     printf("key:24 data:%d\n", bftGet(t, 24));
+     printf("key:72 data:%d\n", bftGet(t, 72));
+     printf("key:01 data:%d\n", bftGet(t, 1));
+     printf("key:39 data:%d\n", bftGet(t, 39));
+     printf("key:53 data:%d\n", bftGet(t, 53));
+     printf("key:63 data:%d\n", bftGet(t, 63));
+     printf("key:90 data:%d\n", bftGet(t, 90));
+     printf("key:88 data:%d\n", bftGet(t, 88));
+     printf("key:15 data:%d\n", bftGet(t, 15));
+     printf("key:10 data:%d\n", bftGet(t, 10));
+     printf("key:44 data:%d\n", bftGet(t, 44));
+     printf("key:68 data:%d\n", bftGet(t, 68));
+     printf("key:74 data:%d\n", bftGet(t, 74));
+     printf("key:44 data:%d\n", bftGet(t, 44));
+     printf("key:45 data:%d\n", bftGet(t, 45));
+     printf("key:46 data:%d\n", bftGet(t, 46));
+     printf("key:47 data:%d\n", bftGet(t, 47));
+     printf("key:321 data:%d\n", bftGet(t, 321));
+     printf("key:5528 data:%d\n", bftGet(t, 5528));
+     printf("key:848 data:%d\n", bftGet(t, 848));
+     printf("key:748 data:%d\n", bftGet(t, 748));
+     printf("key:1528 data:%d\n", bftGet(t, 1528));
+     printf("key:2528 data:%d\n", bftGet(t, 2528));
+     bftRemove(t, 90);
+     bftDump(t);
+     bftRemove(t, 88);
+     bftDump(t);
+     bftRemove(t, 74);
+     bftDump(t);
+     bftRemove(t, 72);
+     bftDump(t);
+     bftRemove(t, 68);
+     bftDump(t);
+     bftRemove(t, 63);
+     bftDump(t);
+     bftRemove(t, 53);
+     bftDump(t);
+     bftRemove(t, 44);
+     bftDump(t);
+     bftRemove(t, 39);
+     bftDump(t);
+     bftRemove(t, 24);
+     bftDump(t);
+     bftRemove(t, 15);
+     bftDump(t);
+     bftRemove(t, 10);
+     bftDump(t);
+     bftRemove(t, 1);
+     bftDump(t);
 #endif
      
      int i;
 #if 0
      /* Ordered insertion and deletion */
      for (i = 1; i <= n; i++) {
-         bptPut(t, i, i);
+         bftPut(t, i, i);
      }
      
-     bptTraverse(t);
+     bftTraverse(t);
      
      for (i = 1; i <= n; i++) {
-         bptRemove(t, i);
+         bftRemove(t, i);
      }
-     bptDump(t);
+     bftDump(t);
      
      /* Ordered insertion and reversed deletion */
      for (i = 1; i <= n; i++) {
-         bptPut(t, i, i);
+         bftPut(t, i, i);
      }
-     bptDump(t);
+     bftDump(t);
      while (--i > 0) {
-         bptRemove(t, i);
+         bftRemove(t, i);
      }
-     bptDump(t);
+     bftDump(t);
      
      /* Reversed insertion and ordered deletion */
      for (i = n; i > 0; i--) {
-         bptPut(t, i, i);
+         bftPut(t, i, i);
      }
-     bptDump(t);
+     bftDump(t);
      for (i = 1; i <= n; i++) {
-         bptRemove(t, i);
+         bftRemove(t, i);
      }
-     bptDump(t);
+     bftDump(t);
 
      /* Reversed insertion and reversed deletion */
      for (i = n; i > 0; i--) {
-         bptPut(t, i, i);
+         bftPut(t, i, i);
      }
-     bptDump(t);
+     bftDump(t);
      
      for (i = n; i > 0; i--) {
-         bptRemove(t, i);
+         bftRemove(t, i);
      }
-     bptDump(t);
+     bftDump(t);
     
 #endif
 #if 1     
      keys = create_array( n, n );
      
      for (i = 0; i < n; i++) {
-         //bptPut(t, i, i);
-         bptPut(t, n-i, n-i);
-         //bptPut(t, keys[i], keys[i]);
+         val = i;
+         bftPut(t, i, (void *)&val );
+         //bftPut(t, keys[i], keys[i]);
      }
-     //bptDump(t);
+     //bftDump(t);
      
      for (i = 0; i < n; i++) {
-         //bptRemove(t, i);
-         //bptRemove(t, n-i);
-         //bptRemove(t, keys[i]);
      }
 
-     bptTraverse(t,TRAVERSE_BFS);
+     //bftTraverse(t,TRAVERSE_BFS);
 #endif
-     //bptRemove(t, keys[0]);
+     //bftRemove(t, keys[0]);
 
-     bptDestroy( t );
+     bftDestroy( t );
      reset_array( keys, n);
      destroy_array( keys );
 

@@ -37,34 +37,44 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "core.h"
+
+#define INVALID_KEY (-1)
 
 typedef int (*key_compare_func)(const void *key1, const void *key2);
 
-
-enum {
+typedef enum {
     BT_GET,
     BT_PUT,
     BT_DEL
 }bt_op_t;
 
-typedef struct request{
-    uint32_t key;
-    uint32_t val;
-    bt_op_t type;
-    struct timeval tm;
-    struct request *next;
-}bft_req_t;
-
-struct bft_opts{
+typedef struct bft_opts{
+    int log;
     key_compare_func key_compare;
 }bft_opts_t;
+
+typedef struct request{
+    int key;    //4 bytes
+    int type;   //4 bytes
+    void *val;  //8 bytes
+    struct timeval tm;  //16 bytes
+    struct request *next; //8 bytes
+}bft_req_t;
+
+typedef struct req_list{
+    bft_req_t *req_first;
+    bft_req_t *req_last;
+    int req_count;
+}rlist_t;
+
+typedef rlist_t blk_buffer_t;
+
 
 struct tree {
     int a;
     int b;
-    int M;
     int B;
+    int m; // # of blocks buffered with each node
     struct node *root;
 
     blk_buffer_t top_buffer;
@@ -73,22 +83,22 @@ struct tree {
 
     // derived param
     int c; // # of request in a block
-    int m; // # of request in a node buffer
     //statistics
     int nNode;
-    int del_payload_count;
-    int put_payload_count;
+    int del_req_count;
+    int put_req_count;
     // logging
+    FILE *req_log;
     FILE *node_log;
     FILE *write_log;
 };
 
 typedef struct tree bft_t;
 
-bft_t * bftCreate( int );
+bft_t * bftCreate( int, int, int, int, bft_opts_t * );
 void bftDestroy( bft_t * );
-int bftGet( bft_t *, int );
-void bftPut( bft_t *, int, int );
+void *bftGet( bft_t *, int );
+void bftPut( bft_t *, int, void * );
 void bftRemove( bft_t *, int );
 void bftDump( bft_t * );
 void bftTraverse( bft_t *, int );
