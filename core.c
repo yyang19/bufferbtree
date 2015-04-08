@@ -36,13 +36,28 @@
 #include <assert.h>
 #include <string.h>
 
-#include "bplustree.h"
+#include "core..h"
 #include "queue.h"
 
 static bpt_t *bptree;
 
 static void _descend( bpt_t *tree, node_t *node, int key );
 static void _dump2( node_t *node, FILE *write_log );
+
+/* utilities */
+int comparetime(time_t time1,time_t time2){
+     return difftime(time1,time2) > 0.0 ? 1 : -1; 
+}
+static int
+_qsort_cmpfunc(const void * a, const void * b)
+{
+    int key_a, key_b;
+
+    key_a = (*((bft_req_t *)a)).key;
+    key_b = (*((bft_req_t *)b)).key;
+    
+    return key_a==key_b ? chunkid_a - chunkid_b : chan_a - chan_b;
+}
 
 
 /*------------- object creation and destroy ------------------------*/
@@ -55,8 +70,9 @@ req_create( void *key, void *val, enum bt_op_t op )
     r =(bt_req_t *)malloc( sizeof(struct request) );
     r->key = key;
     r->val = val;
-    r->next = NULL;
     r->type = op;
+    gettimeofday(&t->tm, NULL);
+    r->next = NULL;
 
     return r;
 }
@@ -85,13 +101,13 @@ req_override(struct bftree *tree, bt_req_t *old, bt_req_t *new)
     req_free(tree, new, 0);
 }
 
-// container
-static container_t *
+// blk_buffer
+blk_buffer_t *
 container_create(void)
 {
     containter_t *c;
 
-    c = (container_t *)malloc(sizeof(struct container));
+    c = (blk_buffer_t *)malloc(sizeof(struct blk_buffer));
     c->req_first = NULL;
     c->req_count = 0;
     c->child = NULL;
@@ -100,7 +116,7 @@ container_create(void)
 }
 
 static void
-container_free( bftree_t *tree, container_t *c )
+container_free( bftree_t *tree, blk_buffer_t *c )
 {
     bt_req_t *curr, *next;
 
@@ -130,7 +146,7 @@ node_create( bft_t *t, node_t *p, int type )
     n = (node_t *) malloc (sizeof(node_t));
 
     if( n ){
-        n->containers = (container_t *) malloc ( sizeof(container_t *) * t->a );
+        n->containers = (blk_buffer_t *) malloc ( sizeof(blk_buffer_t *) * t->a );
         if( n->containers ){
             p->id = ++t->nNode;
             p->type = type;
@@ -164,7 +180,7 @@ void
 node_free( bft_t *t, node_t *r )
 {
     int i;
-    container_t *c;
+    blk_buffer_t *c;
 
     for( i=0; i<n->container_size; i++ ){
         c = node->containers[i];
@@ -206,12 +222,67 @@ request_get( key_compare_func comp, bt_req_t *start, void *key, int *exact )
     return prev_req;
 }
 
-// container
+// top buffer
+int
+top_buffer_insert( bft_t *t, bft_req_t *req )
+{
+    int ret = -1;
+
+    req->next = NULL; 
+
+    if( req_count == 0 )
+        t->top_buffer.req_first = req;
+    else
+        t->top_buffer.req_last.next = req;
+
+    t->top_buffer.req_last = req;
+
+    ++t->top_buffer.req_count;
+
+    if( t->top_buffer.req_count == t->c ) //a block of requests have been collected
+        ret = block_buffer_insert( t, root, &t->top_buffer );
+
+    return ret;
+}
+
+int 
+block_buffer_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
+{
+    int i;
+    int ret = 0;
+
+    i = n->container_size;
+       
+    assert( n->container_size < t->m );
+
+    memmove( n->containers[i], bb, t->B );
+
+    ++ n->container_size;
+
+    if( n->container_size == t->m )
+        buffer_emptying( t, n );
+
+    return ret;
+}
+
+void
+buffer_emptying( bft_t *t, node_t *n )
+{
+    int i;
+
+    assert( n->container_size == t->m );
+
+    for( i = 0; i < t->m; i++ ){
+        //quicksort
+        containers[i]
+    }
+}
+// blk_buffer
 static uint32_t
 container_find( key_compare_func comp, node_t *n, void *key, uint32_t c_start )
 {
     int left, right, middle, result, compared;
-    container_t **containers;
+    blk_buffer_t **containers;
 
     left = c_start;
     right = n->container_size;
@@ -251,7 +322,7 @@ container_get( bft_t *t, node_t *n, uint32_t c_idx, void *key ){
         return NULL;
 
     comp = t->opts->key_compare;
-    container = n->containers[c_idx];
+    blk_buffer = n->containers[c_idx];
     curr = request_get( comp, c->request_first, key, &exact );
 
     if( exact ){
@@ -268,10 +339,10 @@ container_get( bft_t *t, node_t *n, uint32_t c_idx, void *key ){
     return NULL;
 }
 
-static container_t *
+static blk_buffer_t *
 container_shift_left( node_t *n, uint32_t c_idx )
 {
-    container_t *removed;
+    blk_buffer_t *removed;
 
     ASSERT( c_idx < n->container_size );
 

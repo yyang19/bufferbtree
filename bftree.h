@@ -51,8 +51,9 @@ enum {
 typedef struct request{
     uint32_t key;
     uint32_t val;
-    struct request *next;
     bt_op_t type;
+    struct timeval tm;
+    struct request *next;
 }bft_req_t;
 
 struct bft_opts{
@@ -66,8 +67,13 @@ struct tree {
     int B;
     struct node *root;
 
+    blk_buffer_t top_buffer;
+
     bft_opts_t *opts;
 
+    // derived param
+    int c; // # of request in a block
+    int m; // # of request in a node buffer
     //statistics
     int nNode;
     int del_payload_count;

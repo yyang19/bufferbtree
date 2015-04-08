@@ -107,22 +107,7 @@ bftPut( bft_t *tree, void *key, void *val )
 
     new_req = req_create( key, val, BT_PUT );
 
-    if (tree->root == NULL) { //empty tree
-        leaf_t *leaf = _create_leaf(tree);
-        tree->root = &leaf->node;
-    }
-
-    node = tree->root;
-
-    if( node->n == tree->b_factor*2-1 ){
-        s = _create_nonleaf(tree);
-        tree->root = &s->node;
-        s->children[0] = node;
-        _split_child(tree,&s->node,0);
-        _insert_nonfull(tree,&s->node,key,data);
-    }
-    else
-        _insert_nonfull(tree,node,key,data);
+    top_buffer_insert( tree, new_req );
 
     return;
 }
@@ -175,11 +160,18 @@ bftCreate( int a, int b, int M, int B, bft_opts_t *opts )
     t = ( bft_t * ) malloc ( sizeof(bft_t) );
     
     if( t ){
+        
         t->a = a;
         t->b = b;
         t->M = M;
         t->B = B;
+        t->c = B/sizeof(bft_req_t);
+        t->m = M/sizeof(bft_req_t);
+
         t->root = NULL;
+        t->top_buffer.req_first = NULL;
+        t->top_buffer.req_last = NULL;
+        t->top_buffer.req_count = 0;
         t->opts = opts;
         t->nNode = 0;
         t->del_payload_count = t->put_payload_count = 0;
@@ -187,7 +179,6 @@ bftCreate( int a, int b, int M, int B, bft_opts_t *opts )
         t->write_log = fopen( "write.log", "w+" );
     }
 
-    return t;
 }
 
 void
