@@ -43,8 +43,6 @@
 #define DATA_NOT_EXIST (-1)
 #define INVALID_KEY (-1)
 
-typedef int (*key_compare_func)(const void *key1, const void *key2);
-
 enum {
     LEAF_NODE,
     NON_LEAF_NODE = 1,
@@ -54,25 +52,6 @@ enum {
     TRAVERSE_BFS,
     TRAVERSE_DFS = 1,
 };
-
-typedef struct node {
-    int id;
-    int type;
-    int nElem;
-
-    struct node *parent;
-    blk_buffer_t **containers;
-    int bb_count;
-    int bb_size;
-    
-    //child node
-    int *keys;
-    int key_count;
-    struct node *child;
-
-    int wr_count;
-}node_t;
-
 blk_buffer_t * container_create( void );
 
 int request_collect( bft_t *t, bft_req_t *req );

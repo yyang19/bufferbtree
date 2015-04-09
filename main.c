@@ -95,6 +95,12 @@ comp_int( const void *a, const void *b )
     return (*((int *)a)) > (*((int *)b)) ; 
 }
 
+void
+node_write( node_t *n, int b_idx ){
+    
+    ++n->wr_count;
+} 
+
 int main( int argc, char *argv[] ){
     
     int result = 0;
@@ -108,6 +114,7 @@ int main( int argc, char *argv[] ){
     bft_opts_t opts;
     opts.log = 1;
     opts.key_compare = &comp_int;
+    opts.write = &node_write;
     
     if( argc!=3 ){
         _help();
@@ -258,9 +265,6 @@ int main( int argc, char *argv[] ){
      }
      //bftDump(t);
      
-     for (i = 0; i < n; i++) {
-     }
-
      //bftTraverse(t,TRAVERSE_BFS);
 #endif
      //bftRemove(t, keys[0]);

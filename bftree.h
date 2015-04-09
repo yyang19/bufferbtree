@@ -48,11 +48,6 @@ typedef enum {
     BT_DEL
 }bt_op_t;
 
-typedef struct bft_opts{
-    int log;
-    key_compare_func key_compare;
-}bft_opts_t;
-
 typedef struct request{
     int key;    //4 bytes
     int type;   //4 bytes
@@ -69,7 +64,34 @@ typedef struct req_list{
 
 typedef rlist_t blk_buffer_t;
 
+typedef int (*key_compare_func)(const void *key1, const void *key2);
 
+typedef struct node {
+    int id;
+    int type;
+    int nElem;
+
+    struct node *parent;
+    blk_buffer_t *buffer;
+    blk_buffer_t **containers;
+    int bb_count;
+    int bb_size;
+    
+    //child node
+    int *keys;
+    int key_count;
+    struct node **child;
+
+    int wr_count;
+}node_t;
+
+typedef void (*node_buffer_disk_write_func)( node_t *n, int b_idx );
+
+typedef struct bft_opts{
+    int log;
+    key_compare_func key_compare;
+    node_buffer_disk_write_func write;
+}bft_opts_t;
 struct tree {
     int a;
     int b;
@@ -77,7 +99,7 @@ struct tree {
     int m; // # of blocks buffered with each node
     struct node *root;
 
-    blk_buffer_t top_buffer;
+    blk_buffer_t *top_buffer;
 
     bft_opts_t *opts;
 
