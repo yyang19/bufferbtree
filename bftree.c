@@ -66,7 +66,7 @@ bftGet( bft_t *tree, int key )
     if( !tree || key == INVALID_KEY )
         return NULL;
 
-    r = request_get( tree->opts->key_compare, tree->top_buffer.req_first, key, &exact );
+    r = request_get( tree->opts->key_compare, tree->top_buffer->req_first, key, &exact );
 
     if( exact ){
         if( r->type == BT_PUT )
@@ -141,6 +141,10 @@ bftCreate( int a, int b, int m, int B, bft_opts_t *opts )
     t = ( bft_t * ) malloc ( sizeof(bft_t) );
     
     if( t ){
+
+        t->top_buffer = (blk_buffer_t *)malloc(sizeof(blk_buffer_t));
+        if( !t->top_buffer )
+            goto fail_top_buffer;
         
         t->a = a;
         t->b = b;
@@ -149,17 +153,23 @@ bftCreate( int a, int b, int m, int B, bft_opts_t *opts )
         t->c = B/sizeof(bft_req_t);
 
         t->root = NULL;
-        t->top_buffer.req_first = NULL;
-        t->top_buffer.req_last = NULL;
-        t->top_buffer.req_count = 0;
+        t->top_buffer->req_first = NULL;
+        t->top_buffer->req_last = NULL;
+        t->top_buffer->req_count = 0;
         t->opts = opts;
         t->nNode = 0;
         t->del_req_count = t->put_req_count = 0;
         t->req_log = fopen( "request.log", "w+" );
         t->node_log = fopen( "node.log", "w+" );
         t->write_log = fopen( "write.log", "w+" );
+
+        goto out;
     }
 
+fail_top_buffer:
+    free(t);
+    t=NULL;
+out:    
     return t;
 }
 
@@ -169,7 +179,7 @@ bftDestroy( bft_t *t ){
     if( t->root )
         node_free(t, t->root);
 
-    block_buffer_destroy( t, &t->top_buffer );
+    block_buffer_destroy( t, t->top_buffer );
 
     fclose( t->req_log );
     fclose( t->node_log );

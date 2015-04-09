@@ -91,6 +91,16 @@ req_override( bft_t *tree, bft_req_t *old, bft_req_t *new)
     req_free(tree, new);
 }
 
+void
+req_dump( bft_req_t *req ){
+
+     printf( "Request dump\n" );
+     printf( "Key = %d\t", req->key );
+     printf( "Type = %d\t", req->type );
+     printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
+}
+
+
 // block buffer
 blk_buffer_t *
 bb_create(void)
@@ -127,29 +137,74 @@ bb_update( node_t *n, blk_buffer_t *bb, int c_idx )
 
 }
 
+void 
+bb_reset( blk_buffer_t *bb )
+{
+    bb->req_first = NULL;
+    bb->req_last = NULL;
+    bb->req_count = 0;
+}
+
+void
+bb_dump( blk_buffer_t *bb ){
+
+    bft_req_t *curr = bb->req_first;
+
+    while( curr ){
+        req_dump( curr );
+        curr = curr->next;
+    };
+
+    return;
+}
+
+
 // node
 static node_t *
 node_create( bft_t *t, node_t *p, int type )
 {
+    int i;
     node_t *n;
     n = (node_t *) malloc (sizeof(node_t));
 
     if( n ){
-        n->containers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->a );
-        if( n->containers ){
-            p->id = ++t->nNode;
-            p->type = type;
-            p->nElem = 0;
-            n->parent = p;
-            n->bb_count = t->a;
-            n->bb_size = 0;
-        }
-        else{
-            free(n);
-            n=NULL;
-        }
+        n->containers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->m );
+        if( !n->containers )
+            goto fail_containers;
+
+        n->keys = (int *) malloc ( sizeof(int) * t->m );
+        if( !n->keys )
+            goto fail_keys;
+
+        n->child = (struct node **) malloc ( sizeof(struct node *) * (t->m+1) );
+        if( !n->child )
+            goto fail_child;
+
+        n->id = ++t->nNode;
+        n->type = type;
+        n->nElem = 0;
+        n->parent = p;
+        n->bb_count = t->m;
+        n->bb_size = 0;
+        n->key_count = 0;
+        
+        for( i=0; i<t->m; i++ )
+            n->containers[i] = bb_create();
+
+        memset( n->keys, 0xff, sizeof(int) * t->m ); 
+        memset( n->child, 0x0, sizeof(int) * (t->m + 1) ); 
+
+        goto out;
     }
 
+fail_child:
+    free( n->keys );    
+fail_keys:
+    free( n->containers );
+fail_containers:
+    free(n);
+    n = NULL;
+out:
     return n;
 }
 
@@ -158,10 +213,12 @@ node_free_single( bft_t *t, node_t *n )
 {
     int i;
 
-    for( i=0; i<n->bb_size; i++ )
+    for( i=0; i<n->bb_count; i++ )
         bb_free( t, n->containers[i] );
 
     free( n->containers );
+    free( n->keys );
+    free( n->child );
     free( n );
 }
 
@@ -172,7 +229,7 @@ node_free( bft_t *t, node_t *n )
     node_t *c;
 
     for( i=0; i<n->bb_size; i++ ){
-        c = &n->child[i];
+        c = n->child[i];
         if( c )
             node_free_single( t, c );
     }
@@ -198,12 +255,26 @@ block_buffer_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
 {
     int i;
     int ret = 0;
+    bft_req_t *src;
+    bft_req_t **dest;
 
     i = n->bb_size;
        
     assert( n->bb_size < t->m );
 
-    memmove( n->containers[i], bb, t->B );
+    src = bb->req_first;
+    dest = &n->containers[i]->req_first;
+
+    while(src){
+        *dest = src;
+        src = src->next;
+        dest = &( (*dest)->next );
+    };
+    
+    // one I/O to write one block buffer
+    t->opts->write( n,i );
+
+    n->containers[i]->req_count = bb->req_count;
 
     ++ n->bb_size;
 
@@ -243,15 +314,6 @@ request_get( key_compare_func comp, bft_req_t *start, int key, int *exact )
     return prev_req;
 }
 
-void
-request_dump( bft_req_t *req ){
-
-     printf( "Request dump\n" );
-     printf( "Key = %d\t", req->key );
-     printf( "Type = %d\t", req->type );
-     printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
-}
-
 int
 request_collect( bft_t *t, bft_req_t *req )
 {
@@ -259,18 +321,23 @@ request_collect( bft_t *t, bft_req_t *req )
 
     req->next = NULL; 
 
-    if( t->top_buffer.req_count == 0 )
-        t->top_buffer.req_first = req;
+    if( t->top_buffer->req_count == 0 )
+        t->top_buffer->req_first = req;
     else
-        t->top_buffer.req_last->next = req;
+        t->top_buffer->req_last->next = req;
 
-    t->top_buffer.req_last = req;
+    t->top_buffer->req_last = req;
 
-    ++t->top_buffer.req_count;
+    ++t->top_buffer->req_count;
 
-    if( t->top_buffer.req_count == t->c ) //a block of requests have been collected
-        ret = block_buffer_insert( t, t->root, &t->top_buffer );
+    if( t->top_buffer->req_count == t->c ){ //a block of requests have been collected
+        if( !t->root )
+            t->root = node_create( t, NULL, LEAF_NODE );
+        
+        ret = block_buffer_insert( t, t->root, t->top_buffer );
 
+        bb_reset( t->top_buffer );
+    }
     return ret;
 }
 
@@ -278,19 +345,6 @@ void
 block_buffer_destroy( bft_t *t, blk_buffer_t *bb )
 {
     bb_free( t, bb );
-}
-
-void
-block_buffer_dump( blk_buffer_t *bb ){
-
-    bft_req_t *curr = bb->req_first;
-
-    while( curr ){
-        request_dump( curr );
-        curr = curr->next;
-    };
-
-    return;
 }
 
 #if 0
