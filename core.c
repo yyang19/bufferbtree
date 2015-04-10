@@ -245,7 +245,6 @@ block_buffer_emptying( bft_t *t, node_t *n )
         return;
 
     //dump to child nodes
-
 }
 
 static int 
