@@ -58,6 +58,8 @@ int request_collect( bft_t *t, bft_req_t *req );
 void req_free( bft_t *tree, bft_req_t *r );
 bft_req_t * request_get( key_compare_func, bft_req_t *, int, int * );
 
+//request
+void req_dump( bft_req_t * );
 //block buffer
 void block_buffer_destroy( bft_t *, blk_buffer_t * );
 //node
