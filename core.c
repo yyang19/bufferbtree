@@ -91,8 +91,6 @@ request_comp( const void *a, const void *b ){
     return ra->key == rb->key ? timevaldiff(&ra->tm,&rb->tm)<0 : ra->key>rb->key;
 }
     
-
-
 // block buffer
 blk_buffer_t *
 bb_create(void)
@@ -101,7 +99,6 @@ bb_create(void)
 
     bb= (blk_buffer_t *)malloc(sizeof(struct req_list));
     bb->req_first = NULL;
-    bb->req_last  = NULL;
     bb->req_count = 0;
 
     return bb;
@@ -133,7 +130,6 @@ void
 bb_reset( blk_buffer_t *bb )
 {
     bb->req_first = NULL;
-    bb->req_last = NULL;
     bb->req_count = 0;
 }
 
@@ -234,15 +230,22 @@ static void
 block_buffer_emptying( bft_t *t, node_t *n )
 {
     int i;
+    bft_req_t *sorted = NULL;
 
     assert( n->bb_size == t->m );
 
     for( i = 0; i < t->m; i++ ){
-        t->opts->read( n,i );
-        quicksort_ll_dump( n->containers[i]->req_first );
+        t->opts->read( n,i ); //read from disk
         quicksort_ll( &n->containers[i]->req_first, &request_comp );
-        quicksort_ll_dump( n->containers[i]->req_first );
+        sorted = mergelists( sorted, n->containers[i]->req_first, &request_comp );
+        quicksort_ll_dump( sorted );
     }
+
+    if( !sorted )
+        return;
+
+    //dump to child nodes
+
 }
 
 static int 
@@ -314,15 +317,9 @@ request_collect( bft_t *t, bft_req_t *req )
 {
     int ret = 0;
 
-    req->next = NULL; 
-
-    if( t->top_buffer->req_count == 0 )
-        t->top_buffer->req_first = req;
-    else
-        t->top_buffer->req_last->next = req;
-
-    t->top_buffer->req_last = req;
-
+    req->next = t->top_buffer->req_first; 
+    t->top_buffer->req_first = req; 
+    
     ++t->top_buffer->req_count;
 
     if( t->top_buffer->req_count == t->c ){ //a block of requests have been collected

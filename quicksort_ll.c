@@ -33,6 +33,23 @@
             rb->next    = next;             \
         }while(0) 
 
+bft_req_t *
+mergelists( bft_req_t *list1, 
+            bft_req_t *list2, 
+            int (*comp)( const void *a, const void *b) ) 
+{
+    if (list1 == NULL) return list2;
+    if (list2 == NULL) return list1;
+    
+    if ( comp( list1, list2 )==0 ) {
+        list1->next = mergelists(list1->next, list2, comp);
+        return list1;
+    } else {
+        list2->next = mergelists(list2->next, list1, comp);
+        return list2;
+    }
+}
+
 void 
 quicksort_ll_dump( bft_req_t *head )
 {
