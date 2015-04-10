@@ -82,14 +82,17 @@ typedef struct node {
     int key_count;
     struct node **child;
 
+    int rd_count;
     int wr_count;
 }node_t;
 
+typedef void (*node_buffer_disk_read_func)( node_t *n, int b_idx );
 typedef void (*node_buffer_disk_write_func)( node_t *n, int b_idx );
 
 typedef struct bft_opts{
     int log;
     key_compare_func key_compare;
+    node_buffer_disk_write_func read;
     node_buffer_disk_write_func write;
 }bft_opts_t;
 struct tree {

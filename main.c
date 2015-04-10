@@ -96,6 +96,12 @@ comp_int( const void *a, const void *b )
 }
 
 void
+node_read( node_t *n, int b_idx ){
+    
+    ++n->rd_count;
+} 
+
+void 
 node_write( node_t *n, int b_idx ){
     
     ++n->wr_count;
@@ -114,6 +120,7 @@ int main( int argc, char *argv[] ){
     bft_opts_t opts;
     opts.log = 1;
     opts.key_compare = &comp_int;
+    opts.read = &node_read;
     opts.write = &node_write;
     
     if( argc!=3 ){

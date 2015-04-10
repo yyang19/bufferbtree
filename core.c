@@ -37,34 +37,8 @@
 #include <string.h>
 
 #include "core.h"
-
-/* utilities */
-
-/* struct timeval {
- *     long tv_sec;         seconds 
- *     long tv_usec;   microseconds 
- * }
- */
-
-long timevaldiff(struct timeval *ta, struct timeval *tb)
-{
-      long msec;
-      msec=(tb->tv_sec-ta->tv_sec)*1000;
-      msec+=(tb->tv_usec-ta->tv_usec)/1000;
-      return msec;
-}
-
-static int
-_qsort_cmpfunc_int(const void * a, const void * b)
-{
-    int key_a, key_b;
-
-    key_a = (*((bft_req_t *)a)).key;
-    key_b = (*((bft_req_t *)b)).key;
-    
-    return key_a > key_b ;
-}
-
+#include "util.h"
+#include "quicksort_ll.h"
 
 /*------------- object creation and destroy ------------------------*/
 void 
@@ -99,6 +73,24 @@ req_dump( bft_req_t *req ){
      printf( "Type = %d\t", req->type );
      printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
 }
+
+/*
+ *  request_comp (a, b)
+ *  return 1 : a>b
+ *  return 0 : a<b; 
+ *  note that a would not be equal to b in the comparison of bft_req_t objects.
+ * */
+int 
+request_comp( const void *a, const void *b ){
+    
+    bft_req_t *ra, *rb;
+
+    ra = (bft_req_t *)a;
+    rb = (bft_req_t *)b;
+
+    return ra->key == rb->key ? timevaldiff(&ra->tm,&rb->tm)<0 : ra->key>rb->key;
+}
+    
 
 
 // block buffer
@@ -246,7 +238,10 @@ block_buffer_emptying( bft_t *t, node_t *n )
     assert( n->bb_size == t->m );
 
     for( i = 0; i < t->m; i++ ){
-        //quicksort
+        t->opts->read( n,i );
+        quicksort_ll_dump( n->containers[i]->req_first );
+        quicksort_ll( &n->containers[i]->req_first, &request_comp );
+        quicksort_ll_dump( n->containers[i]->req_first );
     }
 }
 
