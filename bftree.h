@@ -83,6 +83,7 @@ typedef struct node {
     int wr_count;
 
     void *disk_content;
+    struct node *next;
 }node_t;
 
 typedef void (*node_disk_read_func) (node_t *n, void *payload, int size );

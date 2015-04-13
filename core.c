@@ -440,6 +440,61 @@ fill_node_blk_buffer( bft_t *t, bft_req_t *start, int count, node_t *dst_node )
 }
 
 static STATUS
+_split_child( bft_t *tree, node_t *node, int i )
+{
+    int j;
+    int t = tree->a;
+    node_t *y, *z;
+
+    y = node->child[i];
+    
+    z = node_create( tree, node, y->type );
+
+    z->key_count = t-1;
+
+    //move the largest t-1 keys and tchild of y into z
+    for( j=0; j<z->key_count; j++ )
+        z->keys[j] = y->keys[t+j];
+    
+
+    if( y->type != LEAF_BLOCK ){
+        for( j=0; j<=z->key_count; j++ )
+            z->child[j] = z->child[t+j];
+    }
+
+    if( y->type == LEAF_NODE ){
+        y->key_count = t;
+        z->next = y->next;
+        y->next = z;    
+    }
+    else
+        y->key_count = t-1;
+
+    //shift child pointers in node dest the right dest create a room for z
+    
+    for( j=node->key_count+1; j>i; j-- )
+        node->child[j] = node->child[j-1];
+
+    node->child[i+1] = z;
+
+    for( j=node->key_count; j>i; j-- )
+        node->keys[j] = node->keys[j-1];
+
+    node->keys[i] = y->keys[t-1];
+    node->key_count++;
+
+    tree->opts->write_node( node, (void *)node, sizeof(node_t) );
+    tree->opts->write_node( y, (void *)y, sizeof(node_t) );
+    tree->opts->write_node( z, (void *)z, sizeof(node_t) );
+
+    //NODE_WRITE(y);
+    //NODE_WRITE(z);
+    //NODE_WRITE(node);
+
+    return 0;
+}
+
+static STATUS
 node_push_to_child( bft_t *t, node_t *n, bft_req_t *req ){
 
     int i;
@@ -543,6 +598,7 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     }
     else{
         // step 4 in Fig.3 of L.Arge[1]
+        _split_child( t, node, t->a );
     
     }
 
