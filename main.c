@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
-
+#include <string.h>
 #include "bftree.h"
 
 #define MAX (1<<10)
@@ -96,13 +96,27 @@ comp_int( const void *a, const void *b )
 }
 
 void
-node_read( node_t *n, int b_idx ){
+node_read( node_t *n, void *payload, int size ){
+
+    memmove( payload, n->disk_content, size );    
+    ++n->rd_count;
+} 
+
+void 
+node_write( node_t *n, void *payload, int size ){
+    
+    memmove( n->disk_content, payload, size );    
+    ++n->wr_count;
+} 
+
+void
+node_buffer_read( node_t *n, int b_idx ){
     
     ++n->rd_count;
 } 
 
 void 
-node_write( node_t *n, int b_idx ){
+node_buffer_write( node_t *n, int b_idx ){
     
     ++n->wr_count;
 } 
@@ -120,8 +134,10 @@ int main( int argc, char *argv[] ){
     bft_opts_t opts;
     opts.log = 1;
     opts.key_compare = &comp_int;
-    opts.read = &node_read;
-    opts.write = &node_write;
+    opts.read_node = &node_read;
+    opts.write_node = &node_write;
+    opts.read_node_buffer = &node_buffer_read;
+    opts.write_node_buffer = &node_buffer_write;
     
     if( argc!=3 ){
         _help();

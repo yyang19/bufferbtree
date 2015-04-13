@@ -39,22 +39,6 @@
 #include "bftree.h"
 #include "core.h"
 
-/*--------------------------req------------------------*/
-bft_req_t *
-req_create( int key, void *val, bt_op_t op )
-{
-    bft_req_t *r;
-
-    r =(bft_req_t *)malloc( sizeof(struct request) );
-    r->key = key;
-    r->val = val;
-    r->next = NULL;
-    r->type = op;
-    gettimeofday( &r->tm, NULL );
-
-    return r;
-}
-
 //public API
 void * 
 bftGet( bft_t *tree, int key )
@@ -142,20 +126,22 @@ bftCreate( int a, int b, int m, int B, bft_opts_t *opts )
     
     if( t ){
 
-        t->top_buffer = (blk_buffer_t *)malloc(sizeof(blk_buffer_t));
-        if( !t->top_buffer )
-            goto fail_top_buffer;
-        
         t->a = a;
         t->b = b;
         t->B = B;
         t->m = m;
         t->c = B/sizeof(bft_req_t);
-
-        t->root = NULL;
+        
+        t->top_buffer = (blk_buffer_t *)malloc(sizeof(blk_buffer_t));
+        if( !t->top_buffer )
+            goto fail_top_buffer;
         t->top_buffer->req_first = NULL;
-        t->top_buffer->req_last = NULL;
         t->top_buffer->req_count = 0;
+
+        t->root = node_create( t, NULL, LEAF_NODE );
+        if( !t->root )
+            goto fail_root;
+
         t->opts = opts;
         t->nNode = 0;
         t->del_req_count = t->put_req_count = 0;
@@ -166,6 +152,8 @@ bftCreate( int a, int b, int m, int B, bft_opts_t *opts )
         goto out;
     }
 
+fail_root:
+    free(t->top_buffer);
 fail_top_buffer:
     free(t);
     t=NULL;

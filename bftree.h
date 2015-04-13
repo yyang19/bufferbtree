@@ -58,7 +58,6 @@ typedef struct request{
 
 typedef struct req_list{
     bft_req_t *req_first;
-    bft_req_t *req_last;
     int req_count;
 }rlist_t;
 
@@ -69,10 +68,8 @@ typedef int (*key_compare_func)(const void *key1, const void *key2);
 typedef struct node {
     int id;
     int type;
-    int nElem;
 
     struct node *parent;
-    blk_buffer_t *buffer;
     blk_buffer_t **containers;
     int bb_count;
     int bb_size;
@@ -84,16 +81,22 @@ typedef struct node {
 
     int rd_count;
     int wr_count;
+
+    void *disk_content;
 }node_t;
 
+typedef void (*node_disk_read_func) (node_t *n, void *payload, int size );
+typedef void (*node_disk_write_func) (node_t *n, void *payload, int size );
 typedef void (*node_buffer_disk_read_func)( node_t *n, int b_idx );
 typedef void (*node_buffer_disk_write_func)( node_t *n, int b_idx );
 
 typedef struct bft_opts{
     int log;
     key_compare_func key_compare;
-    node_buffer_disk_write_func read;
-    node_buffer_disk_write_func write;
+    node_disk_read_func read_node;
+    node_disk_write_func write_node;
+    node_buffer_disk_read_func read_node_buffer;
+    node_buffer_disk_write_func write_node_buffer;
 }bft_opts_t;
 struct tree {
     int a;

@@ -44,6 +44,7 @@
 #define INVALID_KEY (-1)
 
 enum {
+    LEAF_BLOCK,
     LEAF_NODE,
     NON_LEAF_NODE = 1,
 };
@@ -52,9 +53,18 @@ enum {
     TRAVERSE_BFS,
     TRAVERSE_DFS = 1,
 };
+
+typedef enum {
+    RET_NODE_NOT_EXIST,
+    RET_NODE_BUFFER_NULL,
+    RET_NODE_BUFFER_FULL,
+    RET_END
+} STATUS;
+
 blk_buffer_t * container_create( void );
 
 int request_collect( bft_t *t, bft_req_t *req );
+bft_req_t *req_create( int key, void *val, bt_op_t op );
 void req_free( bft_t *tree, bft_req_t *r );
 bft_req_t * request_get( key_compare_func, bft_req_t *, int, int * );
 
@@ -64,5 +74,6 @@ void req_dump( bft_req_t * );
 void block_buffer_destroy( bft_t *, blk_buffer_t * );
 //node
 void node_free( bft_t *, node_t * );
+node_t * node_create( bft_t *t, node_t *p, int type );
 
 #endif
