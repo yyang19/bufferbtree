@@ -223,7 +223,7 @@ node_create( bft_t *t, node_t *p, int type )
         if( !n->disk_content )
             goto fail_disk_content;
 
-        if( type == LEAF_NODE || type == NON_LEAF_NODE ){
+        if( type == LEAF_NODE || type == INTERNAL_NODE ){
         
             n->keys = (int *) malloc ( sizeof(int) * t->m );
             if( !n->keys )
@@ -242,7 +242,7 @@ node_create( bft_t *t, node_t *p, int type )
         n->type = type;
         n->parent = p;
         
-        if( type == LEAF_NODE || type == NON_LEAF_NODE )
+        if( type == LEAF_NODE || type == INTERNAL_NODE )
             n->bb_count = t->m;
         else if( type == LEAF_BLOCK )
             n->bb_count = 0;
@@ -252,7 +252,7 @@ node_create( bft_t *t, node_t *p, int type )
         n->bb_size = 0;
         n->key_count = 0;
         
-        if( type == LEAF_NODE || type == NON_LEAF_NODE ){
+        if( type == LEAF_NODE || type == INTERNAL_NODE ){
             for( i=0; i<t->m; i++ )
                 n->containers[i] = bb_create();
             
@@ -280,7 +280,7 @@ node_free_single( bft_t *t, node_t *n )
 {
     int i;
 
-    if( n->type == LEAF_NODE || n->type == NON_LEAF_NODE ){
+    if( n->type == LEAF_NODE || n->type == INTERNAL_NODE ){
     
         for( i=0; i<n->bb_count; i++ )
             bb_free( t, n->containers[i] );
@@ -501,7 +501,7 @@ node_push_to_child( bft_t *t, node_t *n, bft_req_t *req ){
     bft_req_t *start, *curr;
     int count;
 
-    assert( n->type == NON_LEAF_NODE );
+    assert( n->type == INTERNAL_NODE );
 
     curr = req;
     start = curr;
@@ -598,7 +598,14 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     }
     else{
         // step 4 in Fig.3 of L.Arge[1]
-        _split_child( t, node, t->a );
+        //
+        if( n == t->root ){
+            s = node_create( t, NULL, INTERNAL_NODE );
+            t->root = s;
+            s->child[0] = n;
+        }
+
+        _split_child( t, n, t->a );
     
     }
 

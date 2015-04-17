@@ -46,7 +46,7 @@
 enum {
     LEAF_BLOCK,
     LEAF_NODE,
-    NON_LEAF_NODE = 1,
+    INTERNAL_NODE = 1,
 };
 
 enum {
