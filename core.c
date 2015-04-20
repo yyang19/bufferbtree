@@ -535,8 +535,9 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     int i;
     int nChild;
     node_t *child;
+    node_t *s;
     bft_req_t *sorted = req;
-    bft_req_t *curr;
+    bft_req_t *prev, *curr;
     blk_buffer_t *bb;
     int count;
     void *payload = malloc ( t->B );
@@ -604,9 +605,39 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
             t->root = s;
             s->child[0] = n;
         }
-
-        _split_child( t, n, t->a );
     
+        /*
+         * Given the in-memory sorted list of requests,
+         * the split performs as following:
+         * 1) create a (right) sibling node
+         * 2) partition the element in the list into 2 groups -- the first group consists of the first t->b/2 blocks of elements, while the second group consists of the rest of elements.
+         * 3) insert the elements in each group, as unit of a block, into the splitted node and created node, respectively; key partitions are adjusted accordingly.
+         * 4) update the key partition in parent nodes, which might propagate to the root. Note that if one-downward-pass algorithm does not need the backward propagation
+         */
+
+        // step 1 
+        _split_child( t, n, t->a );
+
+        // step 2
+        count = 0;
+        curr = sorted;
+
+        do{
+            prev = curr;
+            curr = curr->next;
+            ++count;
+        }while( count < (t->b/2) * t->c );
+
+        assert( prev->next );
+
+        prev->next = NULL;
+        
+        // step 3
+        node_push_to_leaf( t, n, sorted );
+        node_push_to_leaf( t, n->next, curr );
+
+        // step 4  (not needed in one-downward-pass algorithm )
+
     }
 
     free( payload );
