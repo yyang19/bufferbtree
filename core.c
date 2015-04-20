@@ -440,56 +440,40 @@ fill_node_blk_buffer( bft_t *t, bft_req_t *start, int count, node_t *dst_node )
 }
 
 static STATUS
-_split_child( bft_t *tree, node_t *node, int i )
+_sibiling_create( bft_t *tree, node_t *node, int i )
 {
     int j;
-    int t = tree->a;
     node_t *y, *z;
 
     y = node->child[i];
     
     z = node_create( tree, node, y->type );
 
-    z->key_count = t-1;
-
-    //move the largest t-1 keys and tchild of y into z
-    for( j=0; j<z->key_count; j++ )
-        z->keys[j] = y->keys[t+j];
-    
-
-    if( y->type != LEAF_BLOCK ){
-        for( j=0; j<=z->key_count; j++ )
-            z->child[j] = z->child[t+j];
-    }
-
     if( y->type == LEAF_NODE ){
-        y->key_count = t;
         z->next = y->next;
         y->next = z;    
     }
-    else
-        y->key_count = t-1;
-
-    //shift child pointers in node dest the right dest create a room for z
     
     for( j=node->key_count+1; j>i; j-- )
         node->child[j] = node->child[j-1];
 
     node->child[i+1] = z;
 
+    return 0;
+}
+
+static STATUS
+_node_insert_key( bft_t *tree, node_t *node, int i, int new_key )
+{
+    int j;
+    
     for( j=node->key_count; j>i; j-- )
         node->keys[j] = node->keys[j-1];
 
-    node->keys[i] = y->keys[t-1];
+    node->keys[i] = new_key;
     node->key_count++;
 
     tree->opts->write_node( node, (void *)node, sizeof(node_t) );
-    tree->opts->write_node( y, (void *)y, sizeof(node_t) );
-    tree->opts->write_node( z, (void *)z, sizeof(node_t) );
-
-    //NODE_WRITE(y);
-    //NODE_WRITE(z);
-    //NODE_WRITE(node);
 
     return 0;
 }
@@ -540,6 +524,7 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     bft_req_t *prev, *curr;
     blk_buffer_t *bb;
     int count;
+    int new_key;
     void *payload = malloc ( t->B );
 
     assert( n->type == LEAF_NODE );
@@ -604,6 +589,7 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
             s = node_create( t, NULL, INTERNAL_NODE );
             t->root = s;
             s->child[0] = n;
+            n->parent = s;
         }
     
         /*
@@ -616,7 +602,15 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
          */
 
         // step 1 
-        _split_child( t, n, t->a );
+        i = n->parent->key_count;
+        
+        if( i>0 ){
+            while( i>=1 && n->keys[0]<n->parent->keys[i-1] )
+                i--;
+            i++;
+        }
+
+        _sibiling_create( t, n->parent, i );
 
         // step 2
         count = 0;
@@ -630,12 +624,14 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
 
         assert( prev->next );
 
+        new_key = prev->key;
         prev->next = NULL;
         
         // step 3
         node_push_to_leaf( t, n, sorted );
         node_push_to_leaf( t, n->next, curr );
 
+        _node_insert_key( t, n->parent, i, new_key );
         // step 4  (not needed in one-downward-pass algorithm )
 
     }
