@@ -130,7 +130,6 @@ req_passdown( bft_t *t, blk_buffer_t *dst_bb, bft_req_t *req )
 void
 req_dump( bft_req_t *req ){
 
-     printf( "Request dump\n" );
      printf( "Key = %d\t", req->key );
      printf( "Type = %d\t", req->type );
      printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
@@ -208,6 +207,18 @@ bb_dump( blk_buffer_t *bb ){
     return;
 }
 
+void
+list_dump( bft_req_t *head )
+{
+    bft_req_t *curr = head;
+
+    while( curr ){
+        req_dump( curr );
+        curr = curr->next;
+    };
+
+    return;
+}
 
 // node
 node_t *
@@ -355,28 +366,25 @@ int list_len( bft_req_t *head )
     return len;
 }
 
-static blk_buffer_t *
+static bft_req_t *
 request_list_construct( bft_t *t, void *payload )
 {
     int i;
 
     bft_req_t *list = (bft_req_t *)payload;
     bft_req_t *req;
-    blk_buffer_t *bb;
-    
-    bb = bb_create();
+    bft_req_t *head = NULL;
 
     for( i=0; i<t->c; i++ ){
         if( list[i].next ){
             req = req_create( list[i].key, list[i].val, list[i].type );
             req->tm = list[i].tm;
-            req->next = bb->req_first;
-            bb->req_first = req;
-            ++bb->req_count;
+            req->next = head;
+            head = req;
         }
     }
 
-    return bb;
+    return head;
 }
 
 /*
@@ -513,31 +521,58 @@ node_push_to_child( bft_t *t, node_t *n, bft_req_t *req ){
     return 0;
 }
 
+/*
+ * _load_node_request 
+ * Description : load all kv pairs from the child leaf of a given node, returning a sorted list of loaded requests.
+ * */
+static bft_req_t *
+_load_node_request( bft_t *t, node_t *n ){
+    
+    int nChild;
+    int i;
+    void *payload;
+    bft_req_t *sorted;
+    bft_req_t *leaf_list;
+
+    assert( n->type == LEAF_NODE );
+
+    payload = malloc ( t->B );
+    
+    if( !payload )
+        return NULL;
+
+    nChild = n->key_count > 0 ? n->key_count+1 : 0 ;
+    sorted = NULL;
+
+    for( i = 0; i < nChild; i++ ){
+        t->opts->read_node( n->child[i], payload, t->B );
+        leaf_list = request_list_construct( t, payload );
+        quicksort_ll( &leaf_list, &request_comp );
+        sorted = mergelists( sorted, leaf_list, &request_comp );
+    }
+
+    free( payload );
+
+    return sorted;
+}
+    
+
+
 static void
 node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
 {
     int i;
-    int nChild;
-    node_t *child;
     node_t *s;
+    bft_req_t *leaf_node_list;
     bft_req_t *sorted = req;
     bft_req_t *prev, *curr;
-    blk_buffer_t *bb;
     int count;
     int new_key;
     void *payload = malloc ( t->B );
 
-    assert( n->type == LEAF_NODE );
+    leaf_node_list = _load_node_request( t, n );
 
-    nChild = n->key_count;
-
-    for( i = 0; i < nChild; i++ ){
-        child = n->child[i];
-        t->opts->read_node( child, payload, t->B );
-        bb = request_list_construct( t, payload );
-        quicksort_ll( &bb->req_first, &request_comp );
-        sorted = mergelists( sorted, bb->req_first, &request_comp );
-    }
+    sorted = mergelists( sorted, leaf_node_list, &request_comp );
 
     if( list_len(sorted) <= t->b * t->c ){
         // step 3 in Fig.3 of L.Arge[1]

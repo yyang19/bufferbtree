@@ -63,8 +63,6 @@ typedef struct req_list{
 
 typedef rlist_t blk_buffer_t;
 
-typedef int (*key_compare_func)(const void *key1, const void *key2);
-
 typedef struct node {
     int id;
     int type;

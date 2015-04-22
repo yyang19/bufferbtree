@@ -138,12 +138,12 @@ bftCreate( int a, int b, int m, int B, bft_opts_t *opts )
         t->top_buffer->req_first = NULL;
         t->top_buffer->req_count = 0;
 
+        t->nNode = 0;
         t->root = node_create( t, NULL, LEAF_NODE );
         if( !t->root )
             goto fail_root;
 
         t->opts = opts;
-        t->nNode = 0;
         t->del_req_count = t->put_req_count = 0;
         t->req_log = fopen( "request.log", "w+" );
         t->node_log = fopen( "node.log", "w+" );

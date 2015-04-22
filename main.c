@@ -129,7 +129,7 @@ int main( int argc, char *argv[] ){
     int *keys;
     int val;
     int m = 8;
-    int B = 320;
+    int B = sizeof(bft_req_t) * 8;
 
     bft_opts_t opts;
     opts.log = 1;
