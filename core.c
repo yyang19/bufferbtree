@@ -262,6 +262,8 @@ node_create( bft_t *t, node_t *p, int type )
 
         n->bb_size = 0;
         n->key_count = 0;
+        n->rd_count = 0;
+        n->wr_count = 0;
         
         if( type == LEAF_NODE || type == INTERNAL_NODE ){
             for( i=0; i<t->m; i++ )
@@ -376,7 +378,7 @@ request_list_construct( bft_t *t, void *payload )
     bft_req_t *head = NULL;
 
     for( i=0; i<t->c; i++ ){
-        if( list[i].next ){
+        if( list[i].key != INVALID_KEY ){
             req = req_create( list[i].key, list[i].val, list[i].type );
             req->tm = list[i].tm;
             req->next = head;
@@ -556,7 +558,59 @@ _load_node_request( bft_t *t, node_t *n ){
     return sorted;
 }
     
+static STATUS
+_flush_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
+{
+    int i, count;
+    bft_req_t *curr = req;
+    void *payload = malloc ( t->B );
 
+    assert( list_len( req ) <= t->b * t->c );
+        
+    memset( payload, 0xff, t->B );
+    i=0;
+    count = 0;
+
+    while(curr){
+        ((bft_req_t *)payload)[ (count++) % t->c ] = *curr;
+        
+        if( count % t->c == 0 || (!curr->next) ){
+            if( !n->child[i] )
+                n->child[i] = node_create( t, n, LEAF_BLOCK );
+
+            t->opts->write_node( n->child[i], payload, t->B );
+            if( curr->next ){
+                n->keys[i] = curr->key;
+                ++i;
+            }
+            memset( payload, 0xff, t->B );
+        }    
+        curr = curr->next;
+    } 
+
+    free( payload );
+
+    n->key_count = i;
+
+    // fill the rest of keys
+    for( i=n->key_count+1;i<t->b;i++)
+        n->keys[i] = INVALID_KEY;
+
+    // fill the rest of child pointers
+    for( i=n->key_count+1;i<=t->b;i++){
+
+        if( n->child[i] ){
+            node_free( t, n->child[i] );
+            n->child[i] = NULL;
+        }
+    }
+
+    n->bb_size = 0;
+    
+    t->opts->write_node( n, (void *)n, sizeof(node_t) );
+
+    return 0;
+}
 
 static void
 node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
@@ -567,55 +621,18 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     bft_req_t *sorted = req;
     bft_req_t *prev, *curr;
     int count;
+    int total_elem;
     int new_key;
-    void *payload = malloc ( t->B );
 
     leaf_node_list = _load_node_request( t, n );
 
     sorted = mergelists( sorted, leaf_node_list, &request_comp );
 
-    if( list_len(sorted) <= t->b * t->c ){
+    total_elem = list_len(sorted);
+
+    if( total_elem <= t->b * t->c ){
         // step 3 in Fig.3 of L.Arge[1]
-        curr = sorted;
-        count = 0;
-        i = 0;
-        
-        memset( payload, 0xff, t->B );
-
-        while(curr){
-            ((bft_req_t *)payload)[ (count++) % t->c ] = *curr;
-            
-            if( count % t->c == 0 || (!curr->next) ){
-                if( !n->child[i] )
-                    n->child[i] = node_create( t, n, LEAF_BLOCK );
-
-                t->opts->write_node( n->child[i], payload, t->B );
-                if( curr->next ){
-                    n->keys[i] = curr->key;
-                    ++i;
-                }
-                memset( payload, 0xff, t->B );
-            }    
-            curr = curr->next;
-        } 
-
-        n->key_count = i;
-
-        // fill the rest of keys
-        for( i=n->key_count+1;i<t->b;i++)
-            n->keys[i] = INVALID_KEY;
-
-        // fill the rest of child pointers
-        for( i=n->key_count+1;i<=t->b;i++){
-
-            if( n->child[i] ){
-                node_free( t, n->child[i] );
-                n->child[i] = NULL;
-            }
-        }
-        
-        t->opts->write_node( n, (void *)n, sizeof(node_t) );
-
+        _flush_to_leaf( t, n, req );
     }
     else{
         // step 4 in Fig.3 of L.Arge[1]
@@ -655,7 +672,7 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
             prev = curr;
             curr = curr->next;
             ++count;
-        }while( count < (t->b/2) * t->c );
+        }while( count < total_elem/2 );
 
         assert( prev->next );
 
@@ -663,15 +680,13 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
         prev->next = NULL;
         
         // step 3
-        node_push_to_leaf( t, n, sorted );
-        node_push_to_leaf( t, n->next, curr );
+        _flush_to_leaf( t, n, sorted );
+        _flush_to_leaf( t, n->next, curr );
 
         _node_insert_key( t, n->parent, i, new_key );
         // step 4  (not needed in one-downward-pass algorithm )
 
     }
-
-    free( payload );
 
     req_list_free( sorted );
 }
