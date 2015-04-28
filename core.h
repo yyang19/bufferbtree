@@ -36,7 +36,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <sys/time.h>
 #include "bftree.h"
 
 #define KEY_NOT_FOUND (-1)

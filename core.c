@@ -37,322 +37,14 @@
 #include <string.h>
 
 #include "core.h"
+#include "node.h"
+#include "req.h"
+#include "blk_buf.h"
 #include "util.h"
 #include "quicksort_ll.h"
 
-static void block_buffer_emptying( bft_t *t, node_t *n );
 
-/*------------- object creation and destroy ------------------------*/
-/*--------------------------req------------------------*/
-bft_req_t *
-req_create( int key, void *val, bt_op_t op )
-{
-    bft_req_t *r;
-
-    r =(bft_req_t *)malloc( sizeof(struct request) );
-    r->key = key;
-    r->val = val;
-    r->next = NULL;
-    r->type = op;
-    gettimeofday( &r->tm, NULL );
-
-    return r;
-}
-
-void 
-req_free( bft_t *tree, bft_req_t *r )
-{
-    free(r);
-    r = NULL;
-}
-
-static void
-req_list_free( bft_req_t *head )
-{
-    bft_req_t *prev, *curr;
     
-    curr = head;
-
-    while( curr ){
-        prev = curr;
-        curr = curr->next;
-        free( prev );
-    };
-
-    return;
-}
-
-void 
-req_override( bft_t *tree, bft_req_t *old, bft_req_t *new)
-{
-    void *temp;
-    temp = old->val;
-    old->val = new->val;
-    new->val = temp;
-    
-    if ( old->type == BT_PUT)
-        tree->put_req_count--;
-    else if( old->type == BT_DEL )
-        tree->del_req_count--;
-
-    old->type = new->type;
-
-    req_free(tree, new);
-}
-/*
-static int 
-req_passdown( bft_t *t, blk_buffer_t *dst_bb, bft_req_t *req )
-{
-    int i;
-    int ret = 0;
-
-    i = dst_bb->req_count;
-       
-    assert( dst_bb->req_count <= t->c );
-
-    req->next = dst_bb->req_first;
-    dst_bb->req_first = req;
-
-    // one I/O to write one block buffer
-    t->opts->write_node_buffer( n,i );
-
-    n->containers[i]->req_count = bb->req_count;
-
-    ++ n->bb_size;
-
-    if( n->bb_size == t->m )
-        block_buffer_emptying( t, n );
-
-    return ret;
-}
-*/
-
-void
-req_dump( bft_req_t *req ){
-
-     printf( "Key = %d\t", req->key );
-     printf( "Type = %d\t", req->type );
-     printf( "Arrival time = <%ld.%06ld>\n", (long int)(req->tm.tv_sec), (long int)(req->tm.tv_usec) );
-}
-
-/*
- *  request_comp (a, b)
- *  return 1 : a>b
- *  return 0 : a<b; 
- *  note that a would not be equal to b in the comparison of bft_req_t objects.
- * */
-int 
-request_comp( const void *a, const void *b ){
-    
-    bft_req_t *ra, *rb;
-
-    ra = (bft_req_t *)a;
-    rb = (bft_req_t *)b;
-
-    return ra->key == rb->key ? timevaldiff(&ra->tm,&rb->tm)<0 : ra->key>rb->key;
-}
-    
-// block buffer
-blk_buffer_t *
-bb_create(void)
-{
-    blk_buffer_t *bb;
-
-    bb= (blk_buffer_t *)malloc(sizeof(struct req_list));
-    bb->req_first = NULL;
-    bb->req_count = 0;
-
-    return bb;
-}
-
-static void
-bb_free( bft_t *tree, blk_buffer_t *bb )
-{
-    bft_req_t *curr, *prev;
-
-    curr = bb->req_first;
-
-    while(curr){
-        prev = curr;
-        curr = curr->next;
-        req_free( tree, prev );
-    };
-
-    free(bb);
-}
-
-void 
-bb_update( node_t *n, blk_buffer_t *bb, int c_idx )
-{
-
-}
-
-void 
-bb_reset( blk_buffer_t *bb )
-{
-    bb->req_first = NULL;
-    bb->req_count = 0;
-}
-
-void
-bb_dump( blk_buffer_t *bb ){
-
-    bft_req_t *curr = bb->req_first;
-
-    while( curr ){
-        req_dump( curr );
-        curr = curr->next;
-    };
-
-    return;
-}
-
-void
-list_dump( bft_req_t *head )
-{
-    bft_req_t *curr = head;
-
-    while( curr ){
-        req_dump( curr );
-        curr = curr->next;
-    };
-
-    return;
-}
-
-// node
-node_t *
-node_create( bft_t *t, node_t *p, int type )
-{
-    int i;
-    node_t *n;
-    n = (node_t *) malloc (sizeof(node_t));
-
-    if( n ){
-        
-        n->disk_content = (void *) malloc ( t->B );
-        if( !n->disk_content )
-            goto fail_disk_content;
-
-        if( type == LEAF_NODE || type == INTERNAL_NODE ){
-        
-            n->keys = (int *) malloc ( sizeof(int) * t->m );
-            if( !n->keys )
-                goto fail_keys;
-
-            n->child = (struct node **) calloc ( t->m+1, sizeof(struct node *) );
-            if( !n->child )
-                goto fail_child;
-
-            n->containers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->m );
-            if( !n->containers )
-                goto fail_containers;
-        }
-
-        n->id = ++t->nNode;
-        n->type = type;
-        n->parent = p;
-        
-        if( type == LEAF_NODE || type == INTERNAL_NODE )
-            n->bb_count = t->m;
-        else if( type == LEAF_BLOCK )
-            n->bb_count = 0;
-        else
-            assert(0);
-
-        n->bb_size = 0;
-        n->key_count = 0;
-        n->rd_count = 0;
-        n->wr_count = 0;
-        
-        if( type == LEAF_NODE || type == INTERNAL_NODE ){
-            for( i=0; i<t->m; i++ )
-                n->containers[i] = bb_create();
-            
-            memset( n->keys, 0xff, sizeof(int) * t->m ); 
-        }
-
-        goto out;
-    }
-
-fail_containers:
-    free( n->child );
-fail_child:
-    free( n->keys );    
-fail_keys:
-    free( n->disk_content );
-fail_disk_content:
-    free(n);
-    n = NULL;
-out:
-    return n;
-}
-
-static void
-node_free_single( bft_t *t, node_t *n )
-{
-    int i;
-
-    if( n->type == LEAF_NODE || n->type == INTERNAL_NODE ){
-    
-        for( i=0; i<n->bb_count; i++ )
-            bb_free( t, n->containers[i] );
-
-        free( n->containers );
-        free( n->keys );
-        free( n->child );
-    }
-
-    free( n->disk_content );
-    free( n );
-}
-
-void
-node_free( bft_t *t, node_t *n )
-{
-    int i;
-    node_t *c;
-
-    for( i=0; i<=n->key_count; i++ ){
-        c = n->child[i];
-        if( c )
-            node_free_single( t, c );
-    }
-
-    node_free_single( t, n );
-}
-
-void
-node_dump( node_t *n )
-{
-    int i;
-
-    printf("Dump node (%p)\n", (void *)n);
-    printf("ID : %d\n", n->id);
-    printf("Type : %d\n", n->type);
-    printf("Parent : %p\n", (void *)n->parent);
-    printf("Buffer count : %d\n", n->bb_count);
-    printf("Buffer size : %d\n", n->bb_size);
-    
-    for( i=0; i<n->bb_size; i++ )
-        bb_dump( n->containers[i] );
-    printf("\n");
-
-    printf("Key count : %d\n", n->key_count);
-    printf("Keys : ");
-    for( i=0; i<n->key_count; i++ )
-        printf("%d\t", n->keys[i]);
-    printf("\n");
-    
-    printf("Children : ");
-    for( i=0; i<=n->key_count; i++ )
-        printf("%p\t", (void *)n->child[i]);
-    printf("\n");
-
-    printf("Read count : %d\n", n->rd_count);
-    printf("Write count : %d\n", n->wr_count);
-}
-
 /*-------------------------- operations ------------------------*/
 static 
 int list_len( bft_req_t *head )
@@ -435,7 +127,7 @@ fill_node_blk_buffer( bft_t *t, bft_req_t *start, int count, node_t *dst_node )
 
         if( ret == RET_NODE_BUFFER_FULL ){
             if( idx == t->m-1 ){
-                block_buffer_emptying( t, dst_node );
+                bb_emptying( t, dst_node );
                 idx = 0;
             }
             ++idx;
@@ -691,70 +383,6 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     req_list_free( sorted );
 }
 
-static void
-block_buffer_emptying( bft_t *t, node_t *n )
-{
-    int i;
-    bft_req_t *sorted = NULL;
-    assert( n->bb_size == t->m );
-
-    for( i = 0; i < t->m; i++ ){
-        t->opts->read_node_buffer( n,i ); //read from disk
-        quicksort_ll( &n->containers[i]->req_first, &request_comp );
-        sorted = mergelists( sorted, n->containers[i]->req_first, &request_comp );
-    }
-
-    if( !sorted )
-        return;
-
-    //dump to child nodes
-    if( n->type == LEAF_NODE ){
-        node_push_to_leaf( t, n, sorted );
-    }
-    else{
-        node_push_to_child( t, n, sorted ); 
-    }
-
-    for( i = 0; i < n->bb_size; i++ )
-        bb_reset( n->containers[i] );
-    
-    n->bb_size = 0;
-}
-
-static int 
-block_buffer_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
-{
-    int i;
-    int ret = 0;
-    bft_req_t *src;
-    bft_req_t **dest;
-
-    i = n->bb_size;
-       
-    assert( n->bb_size < t->m );
-
-    src = bb->req_first;
-    dest = &n->containers[i]->req_first;
-
-    while(src){
-        *dest = src;
-        src = src->next;
-        dest = &( (*dest)->next );
-    };
-    
-    // one I/O to write one block buffer
-    t->opts->write_node_buffer( n,i );
-
-    n->containers[i]->req_count = bb->req_count;
-
-    ++ n->bb_size;
-
-    if( n->bb_size == t->m )
-        block_buffer_emptying( t, n );
-
-    return ret;
-}
-
 
 // request
 bft_req_t *
@@ -785,6 +413,11 @@ request_get( key_compare_func comp, bft_req_t *start, int key, int *exact )
     return prev_req;
 }
 
+/*
+ * request_collect
+ * Description: user requests are buffered (linked) in top_buffer (internal memory) that is of size B.
+ *              The elements is written to the root's buffer once it is full
+ * */
 int
 request_collect( bft_t *t, bft_req_t *req )
 {
@@ -797,18 +430,12 @@ request_collect( bft_t *t, bft_req_t *req )
 
     if( t->top_buffer->req_count == t->c ){ //a block of requests have been collected
         
-        ret = block_buffer_insert( t, t->root, t->top_buffer );
+        ret = blk_buf_insert( t, t->root, t->top_buffer );
 
         bb_reset( t->top_buffer );
     }
     
     return ret;
-}
-
-void
-block_buffer_destroy( bft_t *t, blk_buffer_t *bb )
-{
-    bb_free( t, bb );
 }
 
 #if 0
@@ -887,4 +514,39 @@ bb_shift_left( node_t *n, uint32_t c_idx )
 
     return removed;
 }
+/*
+static int 
+req_passdown( bft_t *t, blk_buffer_t *dst_bb, bft_req_t *req )
+{
+    int i;
+    int ret = 0;
+
+    i = dst_bb->req_count;
+       
+    assert( dst_bb->req_count <= t->c );
+
+    req->next = dst_bb->req_first;
+    dst_bb->req_first = req;
+
+    // one I/O to write one block buffer
+    t->opts->write_node_buffer( n,i );
+
+    n->containers[i]->req_count = bb->req_count;
+
+    ++ n->bb_size;
+
+    if( n->bb_size == t->m )
+        bb_emptying( t, n );
+
+    return ret;
+}
+*/
+
+
+/*
+ *  request_comp (a, b)
+ *  return 1 : a>b
+ *  return 0 : a<b; 
+ *  note that a would not be equal to b in the comparison of bft_req_t objects.
+ * */
 #endif

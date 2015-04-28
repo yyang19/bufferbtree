@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "bftree.h"
+#include "blk_buf.h"
 #include "core.h"
 
 //public API
@@ -167,7 +168,7 @@ bftDestroy( bft_t *t ){
     if( t->root )
         node_free(t, t->root);
 
-    block_buffer_destroy( t, t->top_buffer );
+    bb_free( t, t->top_buffer );
 
     fclose( t->req_log );
     fclose( t->node_log );
