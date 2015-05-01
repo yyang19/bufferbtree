@@ -2,7 +2,9 @@
 #include <assert.h>
 #include <string.h>
 #include "bftree.h"
+#include "core.h"
 #include "req.h"
+#include "quicksort_ll.h"
 
 blk_buffer_t *
 bb_create(void)
@@ -54,23 +56,21 @@ bb_emptying( bft_t *t, node_t *n )
 
     for( i = 0; i < t->m; i++ ){
         t->opts->read_node_buffer( n,i ); //read from disk
-        quicksort_ll( &n->containers[i]->req_first, &request_comp );
-        sorted = mergelists( sorted, n->containers[i]->req_first, &request_comp );
+        quicksort_ll( &n->buffers[i]->req_first, &request_comp );
+        sorted = mergelists( sorted, n->buffers[i]->req_first, &request_comp );
     }
 
     if( !sorted )
         return;
 
     //dump to child nodes
-    if( n->type == LEAF_NODE ){
-        node_push_to_leaf( t, n, sorted );
-    }
-    else{
-        node_push_to_child( t, n, sorted ); 
-    }
+    if( n->type == LEAF_NODE )
+        flush( t, n, sorted );
+    else
+        cascade( t, n, sorted ); 
 
     for( i = 0; i < n->bb_size; i++ )
-        bb_reset( n->containers[i] );
+        bb_reset( n->buffers[i] );
     
     n->bb_size = 0;
 }
@@ -89,7 +89,7 @@ bb_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
     assert( n->bb_size < t->m );
 
     src = bb->req_first;
-    dest = &n->containers[i]->req_first;
+    dest = &n->buffers[i]->req_first;
 
     while(src){
         *dest = src;
@@ -100,7 +100,7 @@ bb_insert( bft_t *t, node_t *n, blk_buffer_t *bb )
     // one I/O to write one block buffer
     t->opts->write_node_buffer( n,i );
 
-    n->containers[i]->req_count = bb->req_count;
+    n->buffers[i]->req_count = bb->req_count;
 
     ++ n->bb_size;
 

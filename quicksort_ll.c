@@ -3,6 +3,7 @@
 #include "bftree.h"
 #include "util.h"
 #include "core.h"
+#include "dump.h"
 #include "quicksort_ll.h"
 
 #define QSORT_LL_SWAP( a, b ) \

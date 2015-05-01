@@ -69,7 +69,7 @@ typedef struct node {
     int type;
 
     struct node *parent;
-    blk_buffer_t **containers;
+    blk_buffer_t **buffers;
     int bb_count;
     int bb_size;
     

@@ -39,6 +39,8 @@
 #include "bftree.h"
 #include "blk_buf.h"
 #include "core.h"
+#include "node.h"
+#include "req.h"
 
 //public API
 void * 

@@ -82,11 +82,11 @@ request_list_construct( bft_t *t, void *payload )
 }
 
 /*
- * req_insert_bb 
+ * enqueue 
  * description: insert a request in the head of the request list
  * */
-static STATUS
-req_insert_bb( bft_t *t, bft_req_t *req, blk_buffer_t *bb )
+STATUS
+enqueue( bft_t *t, bft_req_t *req, blk_buffer_t *bb )
 {
     if( !bb )
         return RET_NODE_BUFFER_NULL;
@@ -98,45 +98,6 @@ req_insert_bb( bft_t *t, bft_req_t *req, blk_buffer_t *bb )
     bb->req_first = req;
 
     ++bb->req_count;
-
-    return 0;
-}
-
-static int
-fill_node_blk_buffer( bft_t *t, bft_req_t *start, int count, node_t *dst_node )
-{
-    int idx;
-    int ret;
-    blk_buffer_t *curr_container;
-    bft_req_t *curr = start;
-
-    if( !dst_node )
-        return -1;
-
-    idx = dst_node->bb_size;
-    
-    while( count>0 ){
-
-        t->opts->read_node_buffer( dst_node, idx ); //read node buffer
-        curr_container = dst_node->containers[idx];
-       
-        ret = req_insert_bb( t, curr, curr_container );
-    
-        if( ret == RET_NODE_BUFFER_NULL )
-            return -1;
-
-        if( ret == RET_NODE_BUFFER_FULL ){
-            if( idx == t->m-1 ){
-                bb_emptying( t, dst_node );
-                idx = 0;
-            }
-            ++idx;
-            continue;
-        }
-
-        curr = curr->next;    
-        --count;
-    };
 
     return 0;
 }
@@ -164,24 +125,8 @@ _sibiling_create( bft_t *tree, node_t *node, int i )
     return 0;
 }
 
-static STATUS
-_node_insert_key( bft_t *tree, node_t *node, int i, int new_key )
-{
-    int j;
-    
-    for( j=node->key_count; j>i; j-- )
-        node->keys[j] = node->keys[j-1];
-
-    node->keys[i] = new_key;
-    node->key_count++;
-
-    tree->opts->write_node( node, (void *)node, sizeof(node_t) );
-
-    return 0;
-}
-
-static STATUS
-node_push_to_child( bft_t *t, node_t *n, bft_req_t *req ){
+STATUS
+cascade( bft_t *t, node_t *n, bft_req_t *req ){
 
     int i;
     bft_req_t *start, *curr;
@@ -203,14 +148,14 @@ node_push_to_child( bft_t *t, node_t *n, bft_req_t *req ){
         }
 
         if( count > 0 )
-            fill_node_blk_buffer( t, start, count, n->child[i] );
+            node_accept( t, n->child[i], start, count );
         
         ++i;
         start = curr;
     };
     
     if( count > 0 )
-        fill_node_blk_buffer( t, start, count, n->child[i] );
+        node_accept( t, n->child[i], start, count );
 
     return 0;
 }
@@ -304,8 +249,8 @@ _flush_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
     return 0;
 }
 
-static void
-node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
+void
+flush( bft_t *t, node_t *n, bft_req_t *req )
 {
     int i;
     node_t *s;
@@ -375,68 +320,18 @@ node_push_to_leaf( bft_t *t, node_t *n, bft_req_t *req )
         _flush_to_leaf( t, n, sorted );
         _flush_to_leaf( t, n->next, curr );
 
-        _node_insert_key( t, n->parent, i, new_key );
+        node_add_key( t, n->parent, i, new_key );
         // step 4  (not needed in one-downward-pass algorithm )
 
     }
 
     req_list_free( sorted );
+
+    for( i=0; i<n->bb_count; i++ )
+        bb_reset( n->buffers[i] );
 }
 
 
-// request
-bft_req_t *
-request_get( key_compare_func comp, bft_req_t *start, int key, int *exact )
-{
-    bft_req_t *curr_req, *prev_req;
-    int compared;
-
-    prev_req = NULL;
-    curr_req = start;
-    *exact = 0;
-
-    while( curr_req ){
-        compared = comp( (void *)&key, (void *)&curr_req->key );
-
-        if( compared < 1 )
-            break;
-
-        if( compared == 0 ){
-            *exact = 1;
-            return curr_req;
-        }
-        
-        prev_req = curr_req;
-        curr_req = curr_req->next;
-    }
-
-    return prev_req;
-}
-
-/*
- * request_collect
- * Description: user requests are buffered (linked) in top_buffer (internal memory) that is of size B.
- *              The elements is written to the root's buffer once it is full
- * */
-int
-request_collect( bft_t *t, bft_req_t *req )
-{
-    int ret = 0;
-
-    req->next = t->top_buffer->req_first; 
-    t->top_buffer->req_first = req; 
-    
-    ++t->top_buffer->req_count;
-
-    if( t->top_buffer->req_count == t->c ){ //a block of requests have been collected
-        
-        ret = blk_buf_insert( t, t->root, t->top_buffer );
-
-        bb_reset( t->top_buffer );
-    }
-    
-    return ret;
-}
 
 #if 0
 // blk_buffer
@@ -444,16 +339,16 @@ static uint32_t
 bb_find( key_compare_func comp, node_t *n, int key, uint32_t c_start )
 {
     int left, right, middle, result, compared;
-    blk_buffer_t **containers;
+    blk_buffer_t **buffers;
 
     left = c_start;
     right = n->bb_size;
     compared = 0;
-    containers = n->containers;
+    buffers = n->buffers;
     
     while( left <= right ){
         middel = (left+right)/2;
-        compared = comp( key, containers[middle]->req_first->key );
+        compared = comp( key, buffers[middle]->req_first->key );
         if( compared<0 )
             right = middle - 1;
         else if( compared>0 )
@@ -484,7 +379,7 @@ bb_get( bft_t *t, node_t *n, uint32_t c_idx, int key ){
         return NULL;
 
     comp = t->opts->key_compare;
-    blk_buffer = n->containers[c_idx];
+    blk_buffer = n->buffers[c_idx];
     curr = request_get( comp, c->request_first, key, &exact );
 
     if( exact ){
@@ -508,8 +403,8 @@ bb_shift_left( node_t *n, uint32_t c_idx )
 
     ASSERT( c_idx < n->bb_size );
 
-    removed = n->containers[c_idx];
-    memmove( &n->containers[c_idx], &n->containers[c_idx+1], (n->bb_size-c_idx-1)*sizeof(void *) );
+    removed = n->buffers[c_idx];
+    memmove( &n->buffers[c_idx], &n->buffers[c_idx+1], (n->bb_size-c_idx-1)*sizeof(void *) );
     --n->bb_size;
 
     return removed;
@@ -531,7 +426,7 @@ req_passdown( bft_t *t, blk_buffer_t *dst_bb, bft_req_t *req )
     // one I/O to write one block buffer
     t->opts->write_node_buffer( n,i );
 
-    n->containers[i]->req_count = bb->req_count;
+    n->buffers[i]->req_count = bb->req_count;
 
     ++ n->bb_size;
 

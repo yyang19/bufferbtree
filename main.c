@@ -125,7 +125,7 @@ int main( int argc, char *argv[] ){
     
     int result = 0;
     int n;
-    bft_t *t; 
+    bft_t *t = NULL; 
     int *keys;
     int val;
     int m = 8;

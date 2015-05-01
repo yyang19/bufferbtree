@@ -47,7 +47,7 @@ node_dump( node_t *n )
     printf("Buffer size : %d\n", n->bb_size);
     
     for( i=0; i<n->bb_size; i++ )
-        bb_dump( n->containers[i] );
+        bb_dump( n->buffers[i] );
     printf("\n");
 
     printf("Key count : %d\n", n->key_count);

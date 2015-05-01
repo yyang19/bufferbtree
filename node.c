@@ -30,8 +30,8 @@ node_create( bft_t *t, node_t *p, int type )
             if( !n->child )
                 goto fail_child;
 
-            n->containers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->m );
-            if( !n->containers )
+            n->buffers = (blk_buffer_t **) malloc ( sizeof(blk_buffer_t *) * t->m );
+            if( !n->buffers )
                 goto fail_containers;
         }
 
@@ -53,7 +53,7 @@ node_create( bft_t *t, node_t *p, int type )
         
         if( type == LEAF_NODE || type == INTERNAL_NODE ){
             for( i=0; i<t->m; i++ )
-                n->containers[i] = bb_create();
+                n->buffers[i] = bb_create();
             
             memset( n->keys, 0xff, sizeof(int) * t->m ); 
         }
@@ -82,9 +82,9 @@ node_free_single( bft_t *t, node_t *n )
     if( n->type == LEAF_NODE || n->type == INTERNAL_NODE ){
     
         for( i=0; i<n->bb_count; i++ )
-            bb_free( t, n->containers[i] );
+            bb_free( t, n->buffers[i] );
 
-        free( n->containers );
+        free( n->buffers );
         free( n->keys );
         free( n->child );
     }
@@ -106,5 +106,65 @@ node_free( bft_t *t, node_t *n )
     }
 
     node_free_single( t, n );
+}
+
+/*
+ *  node_accept
+ *  Description: cascade a list of requsets to a node
+ * */
+STATUS
+node_accept( bft_t *t, node_t *dst_node, bft_req_t *start, int count )
+{
+    int idx;
+    int ret;
+    blk_buffer_t *curr_buffer;
+    bft_req_t *curr = start;
+
+    if( !dst_node )
+        return -1;
+
+    idx = dst_node->bb_size;
+    t->opts->read_node_buffer( dst_node, idx ); //read node buffer
+    
+    while( count>0 ){
+
+        curr_buffer = dst_node->buffers[idx];
+       
+        ret = enqueue( t, curr, curr_buffer );
+    
+        if( ret == RET_NODE_BUFFER_NULL )
+            return -1;
+
+        if( ret == RET_NODE_BUFFER_FULL ){
+            if( idx == t->m-1 ){
+                bb_emptying( t, dst_node );
+                idx = 0;
+            }
+            ++idx;
+            t->opts->read_node_buffer( dst_node, idx ); //read next node buffer
+            continue;
+        }
+
+        curr = curr->next;    
+        --count;
+    };
+
+    return 0;
+}
+
+STATUS
+node_add_key( bft_t *tree, node_t *node, int i, int new_key )
+{
+    int j;
+    
+    for( j=node->key_count; j>i; j-- )
+        node->keys[j] = node->keys[j-1];
+
+    node->keys[i] = new_key;
+    node->key_count++;
+
+    tree->opts->write_node( node, (void *)node, sizeof(node_t) );
+
+    return 0;
 }
 

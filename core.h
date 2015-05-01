@@ -62,17 +62,7 @@ typedef enum {
 
 blk_buffer_t * container_create( void );
 
-int request_collect( bft_t *t, bft_req_t *req );
-bft_req_t *req_create( int key, void *val, bt_op_t op );
-void req_free( bft_t *tree, bft_req_t *r );
-bft_req_t * request_get( key_compare_func, bft_req_t *, int, int * );
-
-//request
-void req_dump( bft_req_t * );
-//block buffer
-void block_buffer_destroy( bft_t *, blk_buffer_t * );
-//node
-void node_free( bft_t *, node_t * );
-node_t * node_create( bft_t *t, node_t *p, int type );
-
+STATUS enqueue( bft_t *t, bft_req_t *req, blk_buffer_t *bb );
+STATUS cascade( bft_t *t, node_t *n, bft_req_t *req );
+void flush( bft_t *t, node_t *n, bft_req_t *req );
 #endif
